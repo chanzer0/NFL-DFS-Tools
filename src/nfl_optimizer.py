@@ -1,4 +1,4 @@
-import json
+import json5 as json
 import csv
 import os
 import datetime
@@ -26,6 +26,7 @@ class NFL_Optimizer:
     matchup_limits = {}
     matchup_at_least = {}
     global_team_limit = None
+    use_double_te = True
     projection_minimum = 0
     randomness_amount = 0
 
@@ -79,6 +80,7 @@ class NFL_Optimizer:
         self.global_team_limit = int(self.config["global_team_limit"])
         self.projection_minimum = int(self.config["projection_minimum"])
         self.randomness_amount = float(self.config["randomness"])
+        self.use_double_te = bool(self.config["use_double_te"])
 
     # Load projections from file
     def load_projections(self, path):
@@ -168,10 +170,14 @@ class NFL_Optimizer:
                                       for player in self.player_dict if 'WR' == self.player_dict[player]['Position']) <= 4
 
             # Need at least 1 TE, up to 2 if using FLEX
-            self.problem += plp.lpSum(lp_variables[player]
-                                      for player in self.player_dict if 'TE' == self.player_dict[player]['Position']) >= 1
-            self.problem += plp.lpSum(lp_variables[player]
-                                      for player in self.player_dict if 'TE' == self.player_dict[player]['Position']) <= 2
+            if self.use_double_te:
+                self.problem += plp.lpSum(lp_variables[player]
+                                          for player in self.player_dict if 'TE' == self.player_dict[player]['Position']) >= 1
+                self.problem += plp.lpSum(lp_variables[player]
+                                          for player in self.player_dict if 'TE' == self.player_dict[player]['Position']) <= 2
+            else:
+                self.problem += plp.lpSum(lp_variables[player]
+                                          for player in self.player_dict if 'TE' == self.player_dict[player]['Position']) == 1
 
             # Need exactly 1 DST
             self.problem += plp.lpSum(lp_variables[player]
@@ -335,7 +341,7 @@ class NFL_Optimizer:
                         x[7].replace(
                             '#', '-'), self.player_dict[x[7]]['RealID'],
                         x[8].replace(
-                            '#', '-'), self.player_dict[x[7]]['RealID'],
+                            '#', '-'), self.player_dict[x[8]]['RealID'],
                         salary, round(
                             fpts_p, 2), ceil, own_p, stddev
                     )
