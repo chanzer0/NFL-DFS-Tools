@@ -1,8 +1,10 @@
 {
   "projection_path": "projections.csv",
   "player_path": "player_ids.csv",
-  "at_most": {},
   "use_double_te": true,
+  "at_most": {
+    "1": [["Ezekiel Elliott", "Tony Pollard"]]
+  },
   "at_least": {
     "1": [
       ["Patrick Mahomes"],
