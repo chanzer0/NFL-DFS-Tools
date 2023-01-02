@@ -20,6 +20,12 @@
     "HOU": 1,
     "TEN": 1
   },
+  "matchup_limits": {
+    "DEN@NYG": 2
+  },
+  "matchup_at_least": {
+    "BUF@NYJ": 2
+  },
   "global_team_limit": 4,
   "projection_minimum": 5,
   "randomness": 25

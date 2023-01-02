@@ -91,8 +91,8 @@ class NFL_Optimizer:
                 player_name = row['Player'].replace('-', '#')
                 if float(row['DK Projection']) < self.projection_minimum and row['DK Position'] != 'DST':
                     continue
-                self.player_dict[player_name] = {'Fpts': 0, 'Position': None, 'ID': 0, 'Salary': 0, 'Name': '', 'RealID': 0, 'Matchup': '',
-                                                 'Team': '', 'Opponent': '', 'Ownership': 0.1, 'Ceiling': 0, 'StdDev': 0}
+                self.player_dict[player_name] = {'Fpts': 0.1, 'Position': None, 'ID': 0, 'Salary': 0, 'Name': '', 'RealID': 0, 'Matchup': '',
+                                                 'Team': '', 'Opponent': '', 'Ownership': 0.1, 'Ceiling': 0.1, 'StdDev': 0}
                 self.player_dict[player_name]['Fpts'] = float(
                     row['DK Projection'])
                 self.player_dict[player_name]['Salary'] = int(row['DK Salary'])
@@ -102,7 +102,8 @@ class NFL_Optimizer:
                 self.player_dict[player_name]['Opponent'] = row['Opponent']
                 self.player_dict[player_name]['Position'] = row['DK Position']
                 self.player_dict[player_name]['Ownership'] = float(
-                    row['DK Ownership'])
+                    row['DK Ownership']) if float(
+                    row['DK Ownership']) != 0 else 0.1
                 self.player_dict[player_name]['Ceiling'] = float(
                     row['DK Ceiling'])
                 self.player_dict[player_name]['StdDev'] = float(row['DK Ceiling']) - float(
