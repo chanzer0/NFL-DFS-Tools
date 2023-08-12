@@ -4,13 +4,6 @@ from windows_inhibitor import *
 from nfl_showdown_optimizer import *
 from nfl_optimizer import *
 
-            # {
-            #     "key": "QB",
-            #     "positions": ["WR"],
-            #     "count": 2,
-            #     "type": "other-games",
-            #     "exclude_teams": []
-            # },
 def main(arguments):
     if len(arguments) < 3 or len(arguments) > 7:
         print('Incorrect usage. Please see `README.md` for proper usage.')
