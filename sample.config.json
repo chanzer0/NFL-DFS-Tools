@@ -1,8 +1,6 @@
 {
     "projection_path": "projections.csv",
-    "ownership_path": "ownership.csv",
     "player_path": "player_ids.csv",
-    "boom_bust_path": "boom_bust.csv",
     "contest_structure_path": "contest_structure.csv",
     "use_double_te": true,
     "global_team_limit": 4,
@@ -62,5 +60,8 @@
     },
     "matchup_at_least": {
         "BUF@NYJ": 2
+    },
+    "custom_correlations" : {
+        "Joe Burrow": {"RB": 0.69, "WR":-0.42}
     }
 }

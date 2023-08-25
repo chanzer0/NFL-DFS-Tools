@@ -82,15 +82,21 @@ The structure for the config is as follows:
 
 ```
 {
-    "projection_path": "projections.csv", // This is where projections are loaded from -- the required columns are "Name" and "Fpts"
-    "ownership_path": "ownership.csv", // This is where ownership is loaded from -- the required columns are "Name" and "Own%"
+    "projection_path": "projections.csv", // This is where projections are loaded from -- the required columns are "Name", "Fpts", "Own%", and "StdDev"
     "player_path": "player_ids.csv", // This is where player ids are loaded from -- this is the direct player ID export from DraftKings/Fanduel found on the contest or edit lineups page.
-    "boom_bust_path": "boom_bust.csv", // This is where boom/bust data (top golfers) is loaded from -- the required columns are "Name", "stddev", and "ceiling"
     "contest_structure_path": "contest_structure.csv", // This is where GPP sim tournament strucure is loaded from -- as seen above, the required columns are "Place", "Payout", "Field Size", "Entry Fee"
-    "projection_minimum": 5,
-    "randomness": 100,
-    "min_lineup_salary": 49200,
-    "max_pct_off_optimal": 0.25,
+    "use_double_te": true, // should the field lineup generator use double te lineups
+    "global_team_limit": 4, // max number of players allowed on one team by the field lineup generator
+    "projection_minimum": 5, // minimum player projection to use
+    "randomness": 25, // percentage of a player's standard deviation to use when simulating. think of this like a global randomness adjustment (100=use player's actual projected stdev)
+    "min_lineup_salary": 49200, //minimum field lineup salary to use in the field lineups generator
+    "max_pct_off_optimal": 0.25, // what percentage off the optimal lineup a lineup is allowed to be in the field generator
+    "num_players_vs_def" : 0, // max number of players to allow in a lineup with the opposing defense
+    "pct_field_using_stacks" : 0.65, // what percentage of the field uses stacks (this number is then randomly sampled so the simulated field values may be different than this value)
+    "pct_field_double_stacks": 0.4, // what percent of the field are allowed to use double stacks (QB + 2 Pass catchers)
+    "default_qb_var" : 0.4, // if no stdev for a QB is supplied, this number is multiplied by the player's projection to estimate a standard deviation
+    "default_skillpos_var" : 0.5, // if no stdev for a RB,WR,TE is supplied, this number is multiplied by the player's projection to estimate a standard deviation
+    "default_def_var" : 0.5, // if no stdev for a DST is supplied, this number is multiplied by the player's projection to estimate a standard deviation
     "at_most": {
         "1": [["Ezekiel Elliott", "Tony Pollard"]] // A simple rule to use at most 1 of these players. Although if you wish to do this for all running backs, it's easier to create a stack rule as shown below
     },
@@ -141,7 +147,20 @@ The structure for the config is as follows:
     },
     "matchup_at_least": { // If a game has a high total or you feel good about the environment, you can specify a minimum number of players to include from that game.
         "BUF@NYJ": 2
-    }
+    },
+    "custom_correlations" : {
+        "Joe Burrow": {"RB": 0.69, "WR":-0.42}
+    } // the gpp simulator uses correlation numbers derived from 2020-2022 data for the entire NFL. if one so chooses they can enter their own custom correlations for specific players (e.g. you may want to boost the default correlation between Pat Mahomes and Travis Kelce) the default values by position are:
+        if pos == 'QB':
+            corr = {'QB': 1, 'RB': 0.08, 'WR': 0.62, 'TE': 0.32, 'DST' : -0.09, 'Opp QB': 0.24, 'Opp RB' : 0.04, 'Opp WR': 0.19, 'Opp TE' : 0.1, 'Opp DST': -0.41}
+        elif pos == 'RB':
+            corr = {'QB': 0.08, 'RB': 1, 'WR': -0.09, 'TE': -0.02, 'DST' : 0.07, 'Opp QB': 0.04, 'Opp RB' : -0.08, 'Opp WR': 0.01, 'Opp TE' : 0.03, 'Opp DST': -0.33}
+        elif pos == 'WR':
+            corr = {'QB': 0.62, 'RB': -0.09, 'WR': 1, 'TE': -0.07, 'DST' : -0.08, 'Opp QB': 0.19, 'Opp RB' : 0.01, 'Opp WR': 0.16, 'Opp TE' : 0.08, 'Opp DST': -0.22}
+        elif pos == 'TE':
+            corr = {'QB': 0.32, 'RB': -0.02, 'WR': -0.07, 'TE': 1, 'DST' : -0.08, 'Opp QB': 0.1, 'Opp RB' : 0.03, 'Opp WR': 0.08, 'Opp TE' : 0, 'Opp DST': -0.14}
+        elif pos == 'DST':
+            corr = {'QB': -0.09, 'RB': 0.07, 'WR': -0.08, 'TE': -0.08, 'DST' : 1, 'Opp QB': -0.41, 'Opp RB' : -0.33, 'Opp WR': -0.22, 'Opp TE' : -0.14, 'Opp DST': -0.27}
 }
 ```
 
@@ -159,7 +178,7 @@ Data is stored in the `output/` directory. Note that subsequent runs of the tool
 
 ### Simulation Methodology
 
-We assume player fantasy point distributions are [gaussian](https://en.wikipedia.org/wiki/Normal_distribution) and create [monte carlo simulations](https://en.wikipedia.org/wiki/Monte_Carlo_method) using the provided fantasy point projections and standard deviations. For the lineup generation process, we take the provided `tournament_lineups.csv` file (if `file` is provided as an argument in the terminal) and then sample from the provided ownership projections to fill the rest of the contest, using the field size provided in the `contest_structure.csv` file. The `max_pct_off_optimal` configuration allows the user to be specific about which generated lineups are kept and which are thrown out, based on the lineup's total projected fantasy points. Once the lineups are generated and the simulated fantasy point distributions are created, we determine the rank of each lineup for each sim and then allocate prize money based on the values provided in the `contest_structure.csv` file.
+We assume player fantasy point distributions are [multivariate gaussian](https://en.wikipedia.org/wiki/Multivariate_normal_distribution) and create [monte carlo simulations](https://en.wikipedia.org/wiki/Monte_Carlo_method) using the provided fantasy point projections, standard deviations and player correlations. For the lineup generation process, we take the provided `tournament_lineups.csv` file (if `file` is provided as an argument in the terminal) and then sample from the provided ownership projections to fill the rest of the contest, using the field size provided in the `contest_structure.csv` file. The `max_pct_off_optimal` configuration allows the user to be specific about which generated lineups are kept and which are thrown out, based on the lineup's total projected fantasy points. Once the lineups are generated and the simulated fantasy point distributions are created, we determine the rank of each lineup for each sim and then allocate prize money based on the values provided in the `contest_structure.csv` file.
 
 ### IMPORTANT NOTES
 

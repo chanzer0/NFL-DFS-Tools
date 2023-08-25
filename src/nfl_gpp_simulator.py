@@ -13,10 +13,6 @@ import statistics
 import itertools
 import collections
 import re
-from copulas.multivariate import GaussianMultivariate
-from copulas.univariate import GammaUnivariate, GaussianUnivariate
-import warnings
-from tqdm import tqdm
 from scipy.stats import norm, kendalltau, multivariate_normal, gamma
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -46,7 +42,8 @@ class NFL_GPP_Simulator:
     min_lineup_salary = 48000
     max_pct_off_optimal = 0.4
     teams_dict = collections.defaultdict(list)  # Initialize teams_dict
-
+    correlation_rules = {}
+    
     def __init__(
         self,
         site,
@@ -119,6 +116,7 @@ class NFL_GPP_Simulator:
             self.load_lineups_from_file()
         #if self.match_lineup_input_to_field_size or len(self.field_lineups) == 0:
         #self.generate_field_lineups()
+        self.load_correlation_rules()
     
     #make column lookups on datafiles case insensitive
     def lower_first(self, iterator):
@@ -135,7 +133,8 @@ class NFL_GPP_Simulator:
         self.default_def_var = float(self.config['default_def_var'])
         self.overlap_limit = float(self.config['num_players_vs_def'])
         self.pct_field_double_stacks = float(self.config['pct_field_double_stacks'])
-
+        self.correlation_rules = self.config["custom_correlations"]
+        
     # In order to make reasonable tournament lineups, we want to be close enough to the optimal that
     # a person could realistically land on this lineup. Skeleton here is taken from base `mlb_optimizer.py`
     def get_optimal(self):
@@ -326,7 +325,15 @@ class NFL_GPP_Simulator:
                         row["payout"].split(".")[0].replace(",", "")
                     )
         # print(self.payout_structure)
-
+    
+    def load_correlation_rules(self):
+        if len(self.correlation_rules.keys())>0:
+            for c in self.correlation_rules.keys():
+                for k in self.player_dict:
+                    if c.replace("-", "#").lower().strip() in self.player_dict[k].values():
+                        for v in self.correlation_rules[c].keys():
+                            self.player_dict[k]['Correlations'][v] = self.correlation_rules[c][v]
+                            
     # Load config from file
     def load_config(self):
         with open(
@@ -439,13 +446,13 @@ class NFL_GPP_Simulator:
             "../{}_data/{}".format(self.site, "tournament_lineups.csv"),
         )
         with open(path) as file:
-            if self.site == "dk":
-                reader = pd.read_csv(file)
-                lineup = []
-                for i, row in reader.iterrows():
-                    # print(row)
-                    if i == self.field_size:
-                        break
+            reader = pd.read_csv(file)
+            lineup = []
+            for i, row in reader.iterrows():
+                # print(row)
+                if i == self.field_size:
+                    break
+                if self.site == 'dk':
                     lineup = [
                         str(row[0].split("(")[1].replace(")","")),
                         str(row[1].split("(")[1].replace(")","")),
@@ -457,16 +464,28 @@ class NFL_GPP_Simulator:
                         str(row[7].split("(")[1].replace(")","")),
                         str(row[8].split("(")[1].replace(")",""))
                     ]
-                    # storing if this lineup was made by an optimizer or with the generation process in this script
-                    self.field_lineups[i] = {
-                        "Lineup": lineup,
-                        "Wins": 0,
-                        "Top10": 0,
-                        "ROI": 0,
-                        "Cashes": 0,
-                        "Type": "opto",
-                    }
-                    i += 1          
+                elif self.site == "fd":
+                    lineup = [
+                        str(row[0]),
+                        str(row[1]),
+                        str(row[2]),
+                        str(row[3]),
+                        str(row[4]),
+                        str(row[5]),
+                        str(row[6]),
+                        str(row[7]),
+                        str(row[8])
+                    ]                        
+                # storing if this lineup was made by an optimizer or with the generation process in this script
+                self.field_lineups[i] = {
+                    "Lineup": lineup,
+                    "Wins": 0,
+                    "Top10": 0,
+                    "ROI": 0,
+                    "Cashes": 0,
+                    "Type": "opto",
+                }
+                i += 1          
         #print(self.field_lineups)
 
     @staticmethod
@@ -650,8 +669,6 @@ class NFL_GPP_Simulator:
                         stack = False
                 #print(sum(in_lineup), stack_len)
                 for ix, (l,pos) in enumerate(zip(lineup,pos_matrix.T)):
-                    # get pitchers irrespective of stack
-#                    print(lu_num,ix, l, pos, k, lineup)
                     if l == '0.0':
                         if k <1:
                             valid_players = np.where((pos > 0) & (in_lineup == 0) & (opponents!=team_stack))
@@ -936,47 +953,47 @@ class NFL_GPP_Simulator:
         for i, player in enumerate(game):
             temp_fpts_dict[player['ID']] = player_samples[i]
 
-        fig, (ax1, ax2, ax3,ax4) = plt.subplots(4, figsize=(15, 25))
-        fig.tight_layout(pad=5.0)
+        # fig, (ax1, ax2, ax3,ax4) = plt.subplots(4, figsize=(15, 25))
+        # fig.tight_layout(pad=5.0)
 
 
-        for i, player in enumerate(game):
-            sns.kdeplot(player_samples[i], ax=ax1, label=player['Name'])
+        # for i, player in enumerate(game):
+        #     sns.kdeplot(player_samples[i], ax=ax1, label=player['Name'])
 
-        ax1.legend(loc='upper right', fontsize=14)
-        ax1.set_xlabel('Fpts', fontsize=14)
-        ax1.set_ylabel('Density', fontsize=14)
-        ax1.set_title(f'Team {team1_id}{team2_id} Distributions', fontsize=14)
-        ax1.tick_params(axis='both', which='both', labelsize=14)
+        # ax1.legend(loc='upper right', fontsize=14)
+        # ax1.set_xlabel('Fpts', fontsize=14)
+        # ax1.set_ylabel('Density', fontsize=14)
+        # ax1.set_title(f'Team {team1_id}{team2_id} Distributions', fontsize=14)
+        # ax1.tick_params(axis='both', which='both', labelsize=14)
 
-        y_min, y_max = ax1.get_ylim()
-        ax1.set_ylim(y_min, y_max*1.1) 
+        # y_min, y_max = ax1.get_ylim()
+        # ax1.set_ylim(y_min, y_max*1.1) 
 
-        ax1.set_xlim(-5, 50)
+        # ax1.set_xlim(-5, 50)
 
-        # # Sorting players and correlating their data
-        player_names = [f"{player['Name']} ({player['Position']})" if player['Position'] is not None else f"{player['Name']} (P)" for player in game]
+        # # # Sorting players and correlating their data
+        # player_names = [f"{player['Name']} ({player['Position']})" if player['Position'] is not None else f"{player['Name']} (P)" for player in game]
         
-        # # Ensuring the data is correctly structured as a 2D array
-        sorted_samples_array = np.array(player_samples)
-        if sorted_samples_array.shape[0] < sorted_samples_array.shape[1]:
-            sorted_samples_array = sorted_samples_array.T
+        # # # Ensuring the data is correctly structured as a 2D array
+        # sorted_samples_array = np.array(player_samples)
+        # if sorted_samples_array.shape[0] < sorted_samples_array.shape[1]:
+        #     sorted_samples_array = sorted_samples_array.T
 
-        correlation_matrix = pd.DataFrame(np.corrcoef(sorted_samples_array.T), columns=player_names, index=player_names)
+        # correlation_matrix = pd.DataFrame(np.corrcoef(sorted_samples_array.T), columns=player_names, index=player_names)
 
-        sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})  
-        ax2.set_title(f'Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
+        # sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})  
+        # ax2.set_title(f'Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
         
-        original_corr_matrix = pd.DataFrame(corr_matrix, columns=player_names, index=player_names)
-        sns.heatmap(original_corr_matrix, annot=True, ax=ax3, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        ax3.set_title(f'Original Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
+        # original_corr_matrix = pd.DataFrame(corr_matrix, columns=player_names, index=player_names)
+        # sns.heatmap(original_corr_matrix, annot=True, ax=ax3, cmap='YlGnBu', cbar_kws={"shrink": .5})
+        # ax3.set_title(f'Original Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
 
-        cov_matrix = pd.DataFrame(covariance_matrix, columns=player_names, index=player_names)
-        sns.heatmap(cov_matrix, annot=True, ax=ax4, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        ax4.set_title(f'Original Covariance Matrix for Game {team1_id}{team2_id}', fontsize=14)
+        # cov_matrix = pd.DataFrame(covariance_matrix, columns=player_names, index=player_names)
+        # sns.heatmap(cov_matrix, annot=True, ax=ax4, cmap='YlGnBu', cbar_kws={"shrink": .5})
+        # ax4.set_title(f'Original Covariance Matrix for Game {team1_id}{team2_id}', fontsize=14)
 
-        plt.savefig(f'output/Team_{team1_id}{team2_id}_Distributions_Correlation.png', bbox_inches='tight')
-        plt.close()
+        # plt.savefig(f'output/Team_{team1_id}{team2_id}_Distributions_Correlation.png', bbox_inches='tight')
+        # plt.close()
         
         return temp_fpts_dict
 
