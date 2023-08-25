@@ -10,6 +10,8 @@
     "randomness": 25,
     "min_lineup_salary": 49200,
     "max_pct_off_optimal": 0.25,
+    "num_players_vs_def" : 0,
+    "pct_field_using_stacks" : 0.65,
     "at_most": {
         "1": [["Ezekiel Elliott", "Tony Pollard"]]
     },
