@@ -302,41 +302,40 @@ class NFL_Optimizer:
                                                     + [-1*[lp_variables[player['Name'].replace('-', '#')] for player in unless_players]]) <= int(count)
                         
 
-        if self.site == 'dk':
-            # Need exactly 1 QB
-            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                      for player in self.player_dict if 'QB' == self.player_dict[player.replace('-', '#')]['Position']) == 1
+ 
+        # Need exactly 1 QB
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                    for player in self.player_dict if 'QB' == self.player_dict[player.replace('-', '#')]['Position']) == 1
 
-            # Need at least 2 RB, up to 3 if using FLEX
-            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                      for player in self.player_dict if 'RB' == self.player_dict[player.replace('-', '#')]['Position']) >= 2
-            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                      for player in self.player_dict if 'RB' == self.player_dict[player.replace('-', '#')]['Position']) <= 3
+        # Need at least 2 RB, up to 3 if using FLEX
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                    for player in self.player_dict if 'RB' == self.player_dict[player.replace('-', '#')]['Position']) >= 2
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                    for player in self.player_dict if 'RB' == self.player_dict[player.replace('-', '#')]['Position']) <= 3
 
-            # Need at least 3 WR, up to 4 if using FLEX
-            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                      for player in self.player_dict if 'WR' == self.player_dict[player.replace('-', '#')]['Position']) >= 3
-            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                      for player in self.player_dict if 'WR' == self.player_dict[player.replace('-', '#')]['Position']) <= 4
+        # Need at least 3 WR, up to 4 if using FLEX
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                    for player in self.player_dict if 'WR' == self.player_dict[player.replace('-', '#')]['Position']) >= 3
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                    for player in self.player_dict if 'WR' == self.player_dict[player.replace('-', '#')]['Position']) <= 4
 
-            # Need at least 1 TE, up to 2 if using FLEX
-            if self.use_double_te:
-                self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                          for player in self.player_dict if 'TE' == self.player_dict[player.replace('-', '#')]['Position']) >= 1
-                self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                          for player in self.player_dict if 'TE' == self.player_dict[player.replace('-', '#')]['Position']) <= 2
-            else:
-                self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                          for player in self.player_dict if 'TE' == self.player_dict[player.replace('-', '#')]['Position']) == 1
-
-            # Need exactly 1 DST
+        # Need at least 1 TE, up to 2 if using FLEX
+        if self.use_double_te:
             self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
-                                      for player in self.player_dict if 'DST' == self.player_dict[player.replace('-', '#')]['Position']) == 1
-
-            # Can only roster 9 total players
-            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')] for player in self.player_dict) == 9
+                                        for player in self.player_dict if 'TE' == self.player_dict[player.replace('-', '#')]['Position']) >= 1
+            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                        for player in self.player_dict if 'TE' == self.player_dict[player.replace('-', '#')]['Position']) <= 2
         else:
-            pass
+            self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                        for player in self.player_dict if 'TE' == self.player_dict[player.replace('-', '#')]['Position']) == 1
+
+        # Need exactly 1 DST
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')]
+                                    for player in self.player_dict if 'DST' == self.player_dict[player.replace('-', '#')]['Position']) == 1
+
+        # Can only roster 9 total players
+        self.problem += plp.lpSum(lp_variables[player.replace('-', '#')] for player in self.player_dict) == 9
+
 
         # Crunch!
         for i in range(self.num_lineups):
