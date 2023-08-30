@@ -41,42 +41,41 @@ class NFL_Optimizer:
 
         self.problem = plp.LpProblem('NFL', plp.LpMaximize)
 
-        # projection_path = os.path.join(os.path.dirname(
-        #     __file__), '../{}_data/{}'.format(site, self.config['projection_path']))
-        # self.load_projections(projection_path)
+        projection_path = os.path.join(os.path.dirname(
+            __file__), '../{}_data/{}'.format(site, self.config['projection_path']))
+        self.load_projections(projection_path)
 
-        # player_path = os.path.join(os.path.dirname(
-        #     __file__), '../{}_data/{}'.format(site, self.config['player_path']))
-        # self.load_player_ids(player_path)
+        player_path = os.path.join(os.path.dirname(
+            __file__), '../{}_data/{}'.format(site, self.config['player_path']))
+        self.load_player_ids(player_path)
         
-        threeJs_path = os.path.join(os.path.dirname(__file__), '../{}_data/{}'.format(site, '3j.csv'))
-        self.load_3js(threeJs_path)
+        # threeJs_path = os.path.join(os.path.dirname(__file__), '../{}_data/{}'.format(site, '3j.csv'))
+        # self.load_3js(threeJs_path)
         
-    def load_3js(self, path):
-         with open(path, encoding='utf-8-sig') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                player_name = row['Name'].replace('-', '#')
-                self.player_dict[player_name] = {}
-                self.player_dict[player_name]['Name'] = player_name
-                self.player_dict[player_name]['Fpts'] = float(row['Fpts'])
-                self.player_dict[player_name]['Position'] = row['Position']
-                self.player_dict[player_name]['Team'] = row['Team']
-                self.player_dict[player_name]['Opponent'] = row['Opponent']
-                self.player_dict[player_name]['Salary'] = int(row['Salary'].replace(',',''))
+    # def load_3js(self, path):
+    #      with open(path, encoding='utf-8-sig') as file:
+    #         reader = csv.DictReader(file)
+    #         for row in reader:
+    #             player_name = row['Name'].replace('-', '#')
+    #             self.player_dict[player_name] = {}
+    #             self.player_dict[player_name]['Name'] = player_name
+    #             self.player_dict[player_name]['Fpts'] = float(row['Fpts'])
+    #             self.player_dict[player_name]['Position'] = row['Position']
+    #             self.player_dict[player_name]['Team'] = row['Team']
+    #             self.player_dict[player_name]['Opponent'] = row['Opponent']
+    #             self.player_dict[player_name]['Salary'] = int(row['Salary'].replace(',',''))
                 
-                if row['Team'] not in self.team_list:
-                    self.team_list.append(row['Team'])
+    #             if row['Team'] not in self.team_list:
+    #                 self.team_list.append(row['Team'])
                     
-                if row['Team'] not in self.players_by_team:
-                    self.players_by_team[row['Team']] = {
-                        'QB': [], 'RB': [], 'WR': [], 'TE': [], 'DST': []
-                    }
+    #             if row['Team'] not in self.players_by_team:
+    #                 self.players_by_team[row['Team']] = {
+    #                     'QB': [], 'RB': [], 'WR': [], 'TE': [], 'DST': []
+    #                 }
                 
-                self.players_by_team[row['Team']][row['Position']].append(self.player_dict[player_name])
+    #             self.players_by_team[row['Team']][row['Position']].append(self.player_dict[player_name])
                 
-                
-                
+
     def flatten(self, list):
         return [item for sublist in list for item in sublist]
 
@@ -197,52 +196,111 @@ class NFL_Optimizer:
         # Address stack rules
         for rule_type in self.stack_rules:
             for rule in self.stack_rules[rule_type]:
-                print(rule_type, rule)
-                pos_key = rule['key']
-                stack_positions = rule['positions']
-                count = rule['count']
-                stack_type = rule['type']
-                excluded_teams = rule['exclude_teams']
-                
-                # Iterate each team, less excluded teams, and apply the rule for each key player pos
-                for team in self.players_by_team:
-                    if team in excluded_teams:
-                        continue
+                if rule_type == 'pair':
+                    pos_key = rule['key']
+                    stack_positions = rule['positions']
+                    count = rule['count']
+                    stack_type = rule['type']
+                    excluded_teams = rule['exclude_teams']
                     
-                    pos_key_player = self.players_by_team[team][pos_key][0]
-                    opp_team = pos_key_player['Opponent']
+                    # Iterate each team, less excluded teams, and apply the rule for each key player pos
+                    for team in self.players_by_team:
+                        if team in excluded_teams:
+                            continue
+                        
+                        pos_key_player = self.players_by_team[team][pos_key][0]
+                        opp_team = pos_key_player['Opponent']
+                        
+                        stack_players = []
+                        if stack_type == 'same-team':
+                            for pos in stack_positions:
+                                stack_players.append(self.players_by_team[team][pos])
+                                
+                        elif stack_type == 'opp-team':
+                            for pos in stack_positions:
+                                stack_players.append(self.players_by_team[opp_team][pos])
+                                
+                        elif stack_type == 'same-game':
+                            for pos in stack_positions:
+                                stack_players.append(self.players_by_team[team][pos])
+                                stack_players.append(self.players_by_team[opp_team][pos])
+                                
+                        stack_players = self.flatten(stack_players)
+                        # player cannot exist as both pos_key_player and be present in the stack_players
+                        stack_players = [
+                            p for p in stack_players 
+                            if not (p['Name'] == pos_key_player['Name'] and p['Position'] == pos_key_player['Position'] and p['Team'] == pos_key_player['Team'])
+                        ]
+                        # [sum of stackable players] + -n*[stack_player] >= 0 
+                        self.problem += plp.lpSum([lp_variables[player['Name'].replace('-', '#')] for player in stack_players] 
+                                                  + [-count*lp_variables[pos_key_player['Name'].replace('-', '#')]]) >= 0
+                        
+                elif rule_type == 'limit':
+                    limit_positions = rule['positions'] # ["RB"]
+                    stack_type = rule['type']
+                    count = rule['count']
+                    excluded_teams = rule['exclude_teams']
+                    if 'unless_positions' in rule or 'unless_type' in rule:
+                        unless_positions = rule['unless_positions']
+                        unless_type = rule['unless_type']
+                    else:
+                        unless_positions = None
+                        unless_type = None
                     
-                    stack_players = []
-                    if stack_type == 'same-team':
-                        for pos in stack_positions:
-                            stack_players.append(self.players_by_team[team][pos])
-                            
-                    elif stack_type == 'opp-team':
-                        for pos in stack_positions:
-                            stack_players.append(self.players_by_team[opp_team][pos])
-                            
-                    elif stack_type == 'same-game':
-                        for pos in stack_positions:
-                            stack_players.append(self.players_by_team[team][pos])
-                            stack_players.append(self.players_by_team[opp_team][pos])
-                            
-                    stack_players = self.flatten(stack_players)
-                    # player cannot exist as both pos_key_player and be present in the stack_players
-                    stack_players = [
-                        p for p in stack_players 
-                        if not (p['Name'] == pos_key_player['Name'] and p['Position'] == pos_key_player['Position'] and p['Team'] == pos_key_player['Team'])
-                    ]
-                    print(pos_key_player)
-                    for player in stack_players:
-                        print('\t', player)
+                    opp_team = self.players_by_team[team]['QB'][0]['Opponent']
+                    
+                    # Iterate each team, less excluded teams, and apply the rule for each key player pos
+                    for team in self.players_by_team:
+                        if team in excluded_teams:
+                            continue
                         
+                        limit_players = []
+                        if stack_type == 'same-team':
+                            for pos in limit_positions:
+                                limit_players.append(self.players_by_team[team][pos])
+                                
+                        elif stack_type == 'opp-team':
+                            for pos in limit_positions:
+                                limit_players.append(self.players_by_team[opp_team][pos])
+                                
+                        elif stack_type == 'same-game':
+                            for pos in limit_positions:
+                                limit_players.append(self.players_by_team[team][pos])
+                                limit_players.append(self.players_by_team[opp_team][pos])
+                                
+                        limit_players = self.flatten(limit_players)
+                        if unless_positions is None or unless_type is None:
+                            # [sum of limit players] + <= n
+                            self.problem += plp.lpSum([lp_variables[player['Name'].replace('-', '#')] for player in limit_players]) <= int(count)
+                        else:
+                            unless_players = []
+                            if unless_type == 'same-team':
+                                for pos in unless_positions:
+                                    unless_players.append(self.players_by_team[team][pos])
+                            elif unless_type == 'opp-team':
+                                for pos in unless_positions:
+                                    unless_players.append(self.players_by_team[opp_team][pos])
+                            elif unless_type == 'same-game':
+                                for pos in unless_positions:
+                                    unless_players.append(self.players_by_team[team][pos])
+                                    unless_players.append(self.players_by_team[opp_team][pos])
+                                    
+                            unless_players = self.flatten(unless_players)
+                            
+                            # player cannot exist as both limit_players and unless_players
+                            unless_players = [
+                                p for p in unless_players
+                                if not any(
+                                    p['Name'] == key_player['Name'] and p['Position'] == key_player['Position'] and p['Team'] == key_player['Team'] 
+                                    for key_player in limit_players
+                                )
+                                
+                            ]
+                            
+                            # [sum of limit players] + -count(unless_players)*[unless_players] <= n
+                            self.problem += plp.lpSum([lp_variables[player['Name'].replace('-', '#')] for player in limit_players]
+                                                    + [-1*[lp_variables[player['Name'].replace('-', '#')] for player in unless_players]]) <= int(count)
                         
-                    if rule_type == 'pair':
-                        # [sum of stackable players] + -n*[stack_pos] >= 0 
-                        self.problem += plp.lpSum([lp_variables[player['Name'].replace('-', '#')] for player in stack_players] + [-count*lp_variables[pos_key_player['Name'].replace('-', '#')]]) >= 0
-                    elif rule_type == 'limit':
-                        # [sum of stackable players] + n*[stack_pos] <= n
-                        self.problem += plp.lpSum([lp_variables[player['Name'].replace('-', '#')] for player in stack_players] + [count*lp_variables[pos_key_player['Name'].replace('-', '#')]]) <= count
 
         if self.site == 'dk':
             # Need exactly 1 QB
