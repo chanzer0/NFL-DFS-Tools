@@ -118,13 +118,20 @@ The structure for the config is as follows:
                 "exclude_teams": []
             }
         ],
-        "limit": [ // "limit" rules are rules designed to limit your exposure to certain players in correlation with the position key
-            {
-                "key": "RB", // Here, we are saying this rule applies to every RB
-                "positions": ["RB"], // Again, we are saying this field describes the stacking position pool (RBs again)
-                "count": 1, // Limit of 1 for this rule
-                "type": "same-team", // same-team here specifies that we want to limit RBs from the same team to at most 1.
-                "exclude_teams": [] // Can exclude teams here, for example RBBC teams like the patriots or commanders. In this case you would set ["NE", "WAS"] to exclude those teams from the rule.
+         "limit": [ // "limit" rules are designed to limit a position to a certain number unless paired with another position
+            { // a basic limit rule, where we are limiting the number of RBs from the same team to 1
+                "positions": ["RB"],
+                "type": "same-team",
+                "count": 1,
+                "exclude_teams": []
+            },
+            { // a more advanced limit rule, where we are limiting the number of WRs and TEs on the same team to 1, unless we are pairing them with a QB from the same game
+                "positions": ["WR", "TE"],
+                "type": "same-team",
+                "count": "1",
+                "exclude_teams": [],
+                "unless_positions": ["QB"],
+                "unless_type": "same-game"
             }
         ]
     },

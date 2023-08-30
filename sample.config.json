@@ -39,11 +39,18 @@
         ],
         "limit": [
             {
-                "key": "RB",
                 "positions": ["RB"],
-                "count": 1,
                 "type": "same-team",
+                "count": 1,
                 "exclude_teams": []
+            },
+            {
+                "positions": ["WR", "TE"],
+                "type": "same-team",
+                "count": "1",
+                "exclude_teams": [],
+                "unless_positions": ["QB"],
+                "unless_type": "same-game"
             }
         ]
     },
