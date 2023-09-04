@@ -109,7 +109,7 @@ class NFL_GPP_Simulator:
             self.payout_structure = {0: 0.0}
             self.entry_fee = 0
         
-        self.adjust_default_stdev()
+        #self.adjust_default_stdev()
         self.num_iterations = int(num_iterations)
         self.get_optimal()
         if self.use_lineup_input:
@@ -356,8 +356,7 @@ class NFL_GPP_Simulator:
             reader = csv.DictReader(self.lower_first(file))
             for row in reader:
                 player_name = row["name"].replace("-", "#").lower().strip()
-                if float(row["fpts"]) < self.projection_minimum:
-                    continue
+                fpts = float(row["fpts"])
                 position = [pos for pos in row['position'].split('/')]
                 position.sort()
                 #if qb and dst not in position add flex
@@ -366,11 +365,11 @@ class NFL_GPP_Simulator:
                 pos = position[0]
                 if row['stddev'] == '':
                     if pos == 'QB':
-                        stddev = float(row("fpts"))* self.default_qb_var
+                        stddev = fpts* self.default_qb_var
                     elif pos == 'DST':
-                        stddev = float(row("fpts"))* self.default_def_var
+                        stddev = fpts* self.default_def_var
                     else:
-                        stddev = float(row["fpts"])*self.default_skillpos_var
+                        stddev = fpts*self.default_skillpos_var
                 else:
                     stddev = float(row["stddev"])
                 #check if ceiling exists in row columns
@@ -381,6 +380,8 @@ class NFL_GPP_Simulator:
                         ceil = float(row['ceiling'])
                 else:
                     ceil = float(row['fpts'])+stddev
+                if row['salary']:
+                    sal = int(row['salary'].replace(",", ""))
                 if pos == 'QB':
                     corr = {'QB': 1, 'RB': 0.08, 'WR': 0.62, 'TE': 0.32, 'DST' : -0.09, 'Opp QB': 0.24, 'Opp RB' : 0.04, 'Opp WR': 0.19, 'Opp TE' : 0.1, 'Opp DST': -0.41}
                 elif pos == 'RB':
@@ -394,7 +395,7 @@ class NFL_GPP_Simulator:
                 team = row['team']
                 pos_str = str(position)
                 player_data = {
-                    "Fpts": float(row["fpts"]),
+                    "Fpts": fpts,
                     "Position": position,
                     "Name" : player_name,
                     "Team" : team,
@@ -416,16 +417,6 @@ class NFL_GPP_Simulator:
                 self.player_dict[(player_name, pos_str,team)] = player_data
                 self.teams_dict[team].append(player_data)  # Add player data to their respective team
 
-    def adjust_default_stdev(self):
-        for (player_name,pos, team) in self.player_dict.keys():
-            if self.player_dict[(player_name,pos,team)]['StdDev'] == 0:
-                if self.player_dict[(player_name,pos,team)]["Position"]== ["P"]:
-                    print(player_name + ' has no stddev, defaulting to ' + str(self.default_pitcher_var) + '*projection')
-                    self.player_dict[(player_name,pos,team)]["StdDev"] = self.player_dict[(player_name,pos,team)]["Fpts"]*self.default_pitcher_var
-                else:
-                    print(player_name + ' has no stddev, defaulting to ' + str(self.default_hitter_var) + '*projection')
-                    self.player_dict[(player_name,pos,team)]["StdDev"] = self.player_dict[(player_name,pos,team)]["Fpts"]*self.default_hitter_var           
-                    
     def load_team_stacks(self):
         # Initialize a dictionary to hold QB ownership by team
         qb_ownership_by_team = {}
@@ -448,6 +439,12 @@ class NFL_GPP_Simulator:
         # Now, update the stacks_dict with the QB ownership by team
         for team, own_percentage in qb_ownership_by_team.items():
             self.stacks_dict[team] = own_percentage
+
+    def extract_id(self,cell_value):
+        if "(" in cell_value and ")" in cell_value:
+            return cell_value.split("(")[1].replace(")", "")
+        else:
+            return cell_value
        
     def load_lineups_from_file(self):
         print("loading lineups")
@@ -459,22 +456,25 @@ class NFL_GPP_Simulator:
         with open(path) as file:
             reader = pd.read_csv(file)
             lineup = []
+            j = 0
             for i, row in reader.iterrows():
                 # print(row)
                 if i == self.field_size:
                     break
                 if self.site == 'dk':
-                    lineup = [
-                        str(row[0].split("(")[1].replace(")","")),
-                        str(row[1].split("(")[1].replace(")","")),
-                        str(row[2].split("(")[1].replace(")","")),
-                        str(row[3].split("(")[1].replace(")","")),
-                        str(row[4].split("(")[1].replace(")","")),
-                        str(row[5].split("(")[1].replace(")","")),
-                        str(row[6].split("(")[1].replace(")","")),
-                        str(row[7].split("(")[1].replace(")","")),
-                        str(row[8].split("(")[1].replace(")",""))
-                    ]
+                    lineup = [self.extract_id(str(row[j])) for j in range(9)]
+                    
+                    # lineup = [
+                    #     str(row[0].split("(")[1].replace(")","")),
+                    #     str(row[1].split("(")[1].replace(")","")),
+                    #     str(row[2].split("(")[1].replace(")","")),
+                    #     str(row[3].split("(")[1].replace(")","")),
+                    #     str(row[4].split("(")[1].replace(")","")),
+                    #     str(row[5].split("(")[1].replace(")","")),
+                    #     str(row[6].split("(")[1].replace(")","")),
+                    #     str(row[7].split("(")[1].replace(")","")),
+                    #     str(row[8].split("(")[1].replace(")",""))
+                    # ]
                 elif self.site == "fd":
                     lineup = [
                         str(row[0]),
@@ -488,15 +488,28 @@ class NFL_GPP_Simulator:
                         str(row[8])
                     ]                        
                 # storing if this lineup was made by an optimizer or with the generation process in this script
-                self.field_lineups[i] = {
-                    "Lineup": lineup,
-                    "Wins": 0,
-                    "Top10": 0,
-                    "ROI": 0,
-                    "Cashes": 0,
-                    "Type": "opto",
-                }
-                i += 1          
+                error = False
+                for l in lineup:
+                    ids = [self.player_dict[k]['ID'] for k in self.player_dict]
+                    if l not in ids:
+                        print("lineup {} is missing players {}".format(i,l))
+                        if l in self.id_name_dict:
+                            print(self.id_name_dict[l])
+                        error = True
+                if len(lineup) < 9:
+                    print("lineup {} is missing players".format(i))
+                    continue
+                if not error:
+                    self.field_lineups[j] = {
+                        "Lineup": lineup,
+                        "Wins": 0,
+                        "Top10": 0,
+                        "ROI": 0,
+                        "Cashes": 0,
+                        "Type": "input",
+                    }
+                    j += 1
+        print("loaded {} lineups".format(j))
         #print(self.field_lineups)
 
     @staticmethod
@@ -803,7 +816,10 @@ class NFL_GPP_Simulator:
                 ids.append(self.player_dict[k]['ID'])
                 ownership.append(self.player_dict[k]['Ownership'])
                 salaries.append(self.player_dict[k]['Salary'])
-                projections.append(self.player_dict[k]['Fpts'])
+                if self.player_dict[k]['Fpts'] >= self.projection_minimum:
+                    projections.append(self.player_dict[k]['Fpts'])
+                else:
+                    projections.append(0)
                 teams.append(self.player_dict[k]['Team'])
                 opponents.append(self.player_dict[k]['Opp'])
                 matchups.append(self.player_dict[k]['Matchup'])
@@ -1011,6 +1027,9 @@ class NFL_GPP_Simulator:
 
     def run_tournament_simulation(self):
         print("Running " + str(self.num_iterations) + " simulations")
+        for f in self.field_lineups:
+            if len(self.field_lineups[f]['Lineup']) != 9:
+                print('bad lineup', f, self.field_lineups[f])
 
         start_time = time.time()
         temp_fpts_dict = {}
@@ -1034,7 +1053,15 @@ class NFL_GPP_Simulator:
         l_array = np.full(shape=self.field_size - len(payout_array), fill_value=-self.entry_fee)
         payout_array = np.concatenate((payout_array, l_array))
         for index, values in self.field_lineups.items():
-            fpts_sim = sum([temp_fpts_dict[player] for player in values["Lineup"]])
+            try:
+                fpts_sim = sum([temp_fpts_dict[player] for player in values["Lineup"]])
+            except KeyError:
+                for player in values["Lineup"]:
+                    if player not in temp_fpts_dict.keys():
+                        for k,v in self.player_dict.items():
+                            if v['ID'] == player:
+                                print(k,v)
+                #print('cant find player in sim dict', values["Lineup"], temp_fpts_dict.keys())
             # store lineup fpts sum in 2d np array where index (row) corresponds to index of field_lineups and columns are the fpts from each sim
             fpts_array[index] = fpts_sim
         ranks = np.argsort(fpts_array, axis=0)[::-1]
@@ -1132,6 +1159,7 @@ class NFL_GPP_Simulator:
                         hitters_vs_pitcher,
                         lu_type
                     )
+                        
                 else:
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{}%,{}%,{}%,{},{},{},{}".format(
                         lu_names[1].replace("#", "-"),
