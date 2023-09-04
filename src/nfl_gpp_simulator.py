@@ -138,9 +138,9 @@ class NFL_GPP_Simulator:
     # In order to make reasonable tournament lineups, we want to be close enough to the optimal that
     # a person could realistically land on this lineup. Skeleton here is taken from base `mlb_optimizer.py`
     def get_optimal(self):
-        for p,s in self.player_dict.items():
-            if s["ID"]==0:
-                print(s["Name"])
+
+            #print(s['Name'],s['ID'])
+        #print(self.player_dict)
         problem = plp.LpProblem('NFL', plp.LpMaximize)
         lp_variables = {self.player_dict[(player, pos_str, team)]['ID']: plp.LpVariable(
             str(self.player_dict[(player, pos_str, team)]['ID']), cat='Binary') for (player, pos_str, team) in self.player_dict}
@@ -254,7 +254,14 @@ class NFL_GPP_Simulator:
         except plp.PulpSolverError:
             print('Infeasibility reached - only generated {} lineups out of {}. Continuing with export.'.format(
                 len(self.num_lineups), self.num_lineups))
-
+        except TypeError:
+            for p,s in self.player_dict.items():
+                if s["ID"]==0:
+                    print(s["Name"] + ' name mismatch between projections and player ids')
+                if s['ID'] == '':
+                    print(s['Name'] + ' name mismatch between projections and player ids')
+                if s['ID'] is None:
+                    print(s['Name'])
         score = str(problem.objective)
         for v in problem.variables():
             score = score.replace(v.name, str(v.varValue))
@@ -366,10 +373,14 @@ class NFL_GPP_Simulator:
                         stddev = float(row["fpts"])*self.default_skillpos_var
                 else:
                     stddev = float(row["stddev"])
-                if row['ceiling'] == '':
-                    ceil = float(row['fpts'])+stddev
+                #check if ceiling exists in row columns
+                if row['ceiling']:
+                    if row['ceiling'] == '':
+                        ceil = float(row['fpts'])+stddev
+                    else:
+                        ceil = float(row['ceiling'])
                 else:
-                    ceil = float(row['ceiling'])
+                    ceil = float(row['fpts'])+stddev
                 if pos == 'QB':
                     corr = {'QB': 1, 'RB': 0.08, 'WR': 0.62, 'TE': 0.32, 'DST' : -0.09, 'Opp QB': 0.24, 'Opp RB' : 0.04, 'Opp WR': 0.19, 'Opp TE' : 0.1, 'Opp DST': -0.41}
                 elif pos == 'RB':
