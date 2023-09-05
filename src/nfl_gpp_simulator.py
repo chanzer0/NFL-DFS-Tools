@@ -278,6 +278,9 @@ class NFL_GPP_Simulator:
                 # some players have 2 positions - will be listed like 'PG/SF' or 'PF/C'
                 position = [pos for pos in row['position'].split('/')]
                 position.sort()
+                if self.site == 'fd':
+                    if 'D' in position:
+                        position = ['DST']
                 #if qb and dst not in position add flex
                 if 'QB' not in position and 'DST' not in position:
                     position.append('FLEX')
@@ -360,6 +363,9 @@ class NFL_GPP_Simulator:
                 position = [pos for pos in row['position'].split('/')]
                 position.sort()
                 #if qb and dst not in position add flex
+                if self.site == 'fd':
+                    if 'D' in position:
+                        position = ['DST']
                 if 'QB' not in position and 'DST' not in position:
                     position.append('FLEX')
                 pos = position[0]
@@ -393,6 +399,11 @@ class NFL_GPP_Simulator:
                 elif pos == 'DST':
                     corr = {'QB': -0.09, 'RB': 0.07, 'WR': -0.08, 'TE': -0.08, 'DST' : 1, 'Opp QB': -0.41, 'Opp RB' : -0.33, 'Opp WR': -0.22, 'Opp TE' : -0.14, 'Opp DST': -0.27}
                 team = row['team']
+                if team == 'LA':
+                    team = 'LAR'
+                if self.site == 'fd':
+                    if team == 'JAX':
+                        team = 'JAC'
                 pos_str = str(position)
                 player_data = {
                     "Fpts": fpts,
@@ -500,8 +511,25 @@ class NFL_GPP_Simulator:
                     print("lineup {} is missing players".format(i))
                     continue
                 if not error:
+                    #reshuffle lineup to match temp_roster_construction
+                    temp_roster_construction = ['DST', 'QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX']
+                    shuffled_lu = []
+
+                    id_to_player_dict = {v["ID"]: v for k, v in self.player_dict.items()}
+                    z = 0
+                    while z < 9:
+                        for t in temp_roster_construction:
+                            for l in lineup:
+                                player_info = id_to_player_dict.get(l)
+                                if player_info and t in player_info['Position']:
+                                    shuffled_lu.append(l)
+                                    z += 1
+                                    if z == 9:
+                                        break
+                            if z == 9:
+                                break
                     self.field_lineups[j] = {
-                        "Lineup": lineup,
+                        "Lineup": shuffled_lu,
                         "Wins": 0,
                         "Top10": 0,
                         "ROI": 0,
@@ -566,7 +594,10 @@ class NFL_GPP_Simulator:
                         # create np array of probability of being seelcted based on ownership and who is eligible at the position
                         prob_list = ownership[valid_players]
                         prob_list = prob_list / prob_list.sum()
-                        choice = np.random.choice(a=plyr_list, p=prob_list)
+                        try:
+                            choice = np.random.choice(a=plyr_list, p=prob_list)
+                        except:
+                            print(plyr_list, prob_list)
                         choice_idx = np.where(ids == choice)[0]
                         lineup.append(str(choice))
                         in_lineup[choice_idx] = 1
@@ -1087,20 +1118,22 @@ class NFL_GPP_Simulator:
     def output(self):
         unique = {}
         for index, x in self.field_lineups.items():
-            #print(x)
+            #if index == 0:
+            #    print(x)
+            lu_type = x["Type"]
             salary = 0
             fpts_p = 0
             ceil_p = 0
             own_p = []
             lu_names = []
             lu_teams = []
-            hitters_vs_pitcher = 0
-            pitcher_opps = []
+            players_vs_def = 0
+            def_opps = []
             for id in x["Lineup"]:
                 for k,v in self.player_dict.items():
                     if v["ID"] == id:  
-                        if 'P' in v["Position"]:
-                            pitcher_opps.append(v['Opp'])         
+                        if 'DST' in v["Position"]:
+                            def_opps.append(v['Opp'])         
             for id in x["Lineup"]:
                 for k,v in self.player_dict.items():
                     if v["ID"] == id:
@@ -1109,10 +1142,10 @@ class NFL_GPP_Simulator:
                         ceil_p += v["Ceiling"]
                         own_p.append(v["Ownership"]/100)
                         lu_names.append(v["Name"])
-                        if 'P' not in v["Position"]:
+                        if 'DST' not in v["Position"]:
                             lu_teams.append(v['Team'])
-                            if v['Team'] in pitcher_opps:
-                                hitters_vs_pitcher += 1
+                            if v['Team'] in def_opps:
+                                players_vs_def += 1
                         continue
             counter = collections.Counter(lu_teams)
             stacks = counter.most_common(2)
@@ -1120,7 +1153,6 @@ class NFL_GPP_Simulator:
             win_p = round(x["Wins"] / self.num_iterations * 100, 2)
             top10_p = round(x["Top10"] / self.num_iterations * 100, 2)
             cash_p = round(x["Cashes"] / self.num_iterations * 100, 2)
-            lu_type = x["Type"]
             if self.site == "dk":
                 if self.use_contest_data:
                     roi_p = round(
@@ -1128,8 +1160,6 @@ class NFL_GPP_Simulator:
                     )
                     roi_round = round(x["ROI"] / self.num_iterations, 2)
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},${},{}%,{}%,{}%,{},${},{},{},{},{}".format(
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
                         lu_names[1].replace("#", "-"),
                         x["Lineup"][1],
                         lu_names[2].replace("#", "-"),
@@ -1146,6 +1176,8 @@ class NFL_GPP_Simulator:
                         x["Lineup"][7],
                         lu_names[8].replace("#", "-"),
                         x["Lineup"][8],
+                        lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1156,13 +1188,11 @@ class NFL_GPP_Simulator:
                         roi_round,
                         str(stacks[0][0]) + ' ' + str(stacks[0][1]),
                         str(stacks[1][0]) + ' ' + str(stacks[1][1]),
-                        hitters_vs_pitcher,
+                        players_vs_def,
                         lu_type
                     )
                 else:
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{}%,{}%,{}%,{},{},{},{}".format(
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
                         lu_names[1].replace("#", "-"),
                         x["Lineup"][1],
                         lu_names[2].replace("#", "-"),
@@ -1179,6 +1209,8 @@ class NFL_GPP_Simulator:
                         x["Lineup"][7],
                         lu_names[8].replace("#", "-"),
                         x["Lineup"][8],
+                        lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1187,7 +1219,7 @@ class NFL_GPP_Simulator:
                         own_p,
                         str(stacks[0][0]) + ' ' + str(stacks[0][1]),
                         str(stacks[1][0]) + ' ' + str(stacks[1][1]),
-                        hitters_vs_pitcher,
+                        players_vs_def,
                         lu_type
                     )
             elif self.site == "fd":
@@ -1197,8 +1229,6 @@ class NFL_GPP_Simulator:
                     )
                     roi_round = round(x["ROI"] / self.num_iterations, 2)
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{}%,{}%,{}%,{},${},{},{},{},{}".format(
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
                         lu_names[1].replace("#", "-"),
                         x["Lineup"][1],
                         lu_names[2].replace("#", "-"),
@@ -1215,6 +1245,8 @@ class NFL_GPP_Simulator:
                         x["Lineup"][7],
                         lu_names[8].replace("#", "-"),
                         x["Lineup"][8],
+                        lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1225,13 +1257,11 @@ class NFL_GPP_Simulator:
                         roi_round,
                         str(stacks[0][0]) + ' ' + str(stacks[0][1]),
                         str(stacks[1][0]) + ' ' + str(stacks[1][1]),
-                        hitters_vs_pitcher,
+                        players_vs_def,
                         lu_type
                     )
                 else:
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{}%,{}%,{},{},{},{},{}".format(
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
                         lu_names[1].replace("#", "-"),
                         x["Lineup"][1],
                         lu_names[2].replace("#", "-"),
@@ -1248,6 +1278,8 @@ class NFL_GPP_Simulator:
                         x["Lineup"][7],
                         lu_names[8].replace("#", "-"),
                         x["Lineup"][8],
+                        lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1256,7 +1288,7 @@ class NFL_GPP_Simulator:
                         own_p,
                         str(stacks[0][0]) + ' ' + str(stacks[0][1]),
                         str(stacks[1][0]) + ' ' + str(stacks[1][1]),
-                        hitters_vs_pitcher,
+                        players_vs_def,
                         lu_type
                     )
             unique[index] = lineup_str
@@ -1271,20 +1303,20 @@ class NFL_GPP_Simulator:
             if self.site == "dk":
                 if self.use_contest_data:
                     f.write(
-                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%,ROI%,Proj. Own. Product,Avg. Return,Stack1 Type,Stack2 Type,Num Opp Hitters,Lineup Type\n"
+                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%,ROI%,Proj. Own. Product,Avg. Return,Stack1 Type,Stack2 Type,Players vs DST,Lineup Type\n"
                     )
                 else:
                     f.write(
-                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%, Proj. Own. Product,Stack1 Type,Stack2 Type,Num Opp Hitters,Lineup Type\n"
+                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%, Proj. Own. Product,Stack1 Type,Stack2 Type,Players vs DST,Lineup Type\n"
                     )
             elif self.site == "fd":
                 if self.use_contest_data:
                     f.write(
-                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%,ROI%,Proj. Own. Product,Avg. Return,Stack1 Type,Stack2 Type,Num Opp Hitters,Lineup Type\n"
+                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%,ROI%,Proj. Own. Product,Avg. Return,Stack1 Type,Stack2 Type,Players vs DST,Lineup Type\n"
                     )
                 else:
                     f.write(
-                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%,Proj. Own. Product,Stack1 Type,Stack2 Type,Num Opp Hitters,Lineup Type\n"
+                        "QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Fpts Proj,Ceiling,Salary,Win %,Top 10%,Proj. Own. Product,Stack1 Type,Stack2 Type,Players vs DST,Lineup Type\n"
                     )
 
             for fpts, lineup_str in unique.items():
