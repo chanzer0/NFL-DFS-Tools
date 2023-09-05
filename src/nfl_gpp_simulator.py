@@ -792,7 +792,7 @@ class NFL_GPP_Simulator:
 
     def generate_field_lineups(self):
         diff = self.field_size - len(self.field_lineups)
-        if diff < 0:
+        if diff <= 0:
             print(
                 "supplied lineups >= contest field size. only retrieving the first "
                 + str(self.field_size)
@@ -1128,6 +1128,8 @@ class NFL_GPP_Simulator:
                     )
                     roi_round = round(x["ROI"] / self.num_iterations, 2)
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},${},{}%,{}%,{}%,{},${},{},{},{},{}".format(
+                        lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
                         lu_names[1].replace("#", "-"),
                         x["Lineup"][1],
                         lu_names[2].replace("#", "-"),
@@ -1144,8 +1146,6 @@ class NFL_GPP_Simulator:
                         x["Lineup"][7],
                         lu_names[8].replace("#", "-"),
                         x["Lineup"][8],
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1159,9 +1159,10 @@ class NFL_GPP_Simulator:
                         hitters_vs_pitcher,
                         lu_type
                     )
-                        
                 else:
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{}%,{}%,{}%,{},{},{},{}".format(
+                        lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
                         lu_names[1].replace("#", "-"),
                         x["Lineup"][1],
                         lu_names[2].replace("#", "-"),
@@ -1178,8 +1179,6 @@ class NFL_GPP_Simulator:
                         x["Lineup"][7],
                         lu_names[8].replace("#", "-"),
                         x["Lineup"][8],
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1198,24 +1197,24 @@ class NFL_GPP_Simulator:
                     )
                     roi_round = round(x["ROI"] / self.num_iterations, 2)
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{}%,{}%,{}%,{},${},{},{},{},{}".format(
-                        x["Lineup"][1],
-                        lu_names[1].replace("#", "-"),
-                        x["Lineup"][2],
-                        lu_names[2].replace("#", "-"),
-                        x["Lineup"][3],
-                        lu_names[3].replace("#", "-"),
-                        x["Lineup"][4],
-                        lu_names[4].replace("#", "-"),
-                        x["Lineup"][5],
-                        lu_names[5].replace("#", "-"),
-                        x["Lineup"][6],
-                        lu_names[6].replace("#", "-"),
-                        x["Lineup"][7],
-                        lu_names[7].replace("#", "-"),
-                        x["Lineup"][8],
-                        lu_names[8].replace("#", "-"),
-                        x["Lineup"][0],
                         lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
+                        lu_names[1].replace("#", "-"),
+                        x["Lineup"][1],
+                        lu_names[2].replace("#", "-"),
+                        x["Lineup"][2],
+                        lu_names[3].replace("#", "-"),
+                        x["Lineup"][3],
+                        lu_names[4].replace("#", "-"),
+                        x["Lineup"][4],
+                        lu_names[5].replace("#", "-"),
+                        x["Lineup"][5],
+                        lu_names[6].replace("#", "-"),
+                        x["Lineup"][6],
+                        lu_names[7].replace("#", "-"),
+                        x["Lineup"][7],
+                        lu_names[8].replace("#", "-"),
+                        x["Lineup"][8],
                         fpts_p,
                         ceil_p,
                         salary,
@@ -1231,24 +1230,24 @@ class NFL_GPP_Simulator:
                     )
                 else:
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{}%,{}%,{},{},{},{},{}".format(
-                        x["Lineup"][1],
-                        lu_names[1].replace("#", "-"),
-                        x["Lineup"][2],
-                        lu_names[2].replace("#", "-"),
-                        x["Lineup"][3],
-                        lu_names[3].replace("#", "-"),
-                        x["Lineup"][4],
-                        lu_names[4].replace("#", "-"),
-                        x["Lineup"][5],
-                        lu_names[5].replace("#", "-"),
-                        x["Lineup"][6],
-                        lu_names[6].replace("#", "-"),
-                        x["Lineup"][7],
-                        lu_names[7].replace("#", "-"),
-                        x["Lineup"][8],
-                        lu_names[8].replace("#", "-"),
-                        x["Lineup"][0],
                         lu_names[0].replace("#", "-"),
+                        x["Lineup"][0],
+                        lu_names[1].replace("#", "-"),
+                        x["Lineup"][1],
+                        lu_names[2].replace("#", "-"),
+                        x["Lineup"][2],
+                        lu_names[3].replace("#", "-"),
+                        x["Lineup"][3],
+                        lu_names[4].replace("#", "-"),
+                        x["Lineup"][4],
+                        lu_names[5].replace("#", "-"),
+                        x["Lineup"][5],
+                        lu_names[6].replace("#", "-"),
+                        x["Lineup"][6],
+                        lu_names[7].replace("#", "-"),
+                        x["Lineup"][7],
+                        lu_names[8].replace("#", "-"),
+                        x["Lineup"][8],
                         fpts_p,
                         ceil_p,
                         salary,
