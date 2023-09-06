@@ -77,13 +77,9 @@ class NFL_Optimizer:
                     self.player_dict[(player_name, position, team)]['Opponent'] = opponent
                     self.player_dict[(player_name, position, team)]['Matchup'] = matchup
                     if self.site == 'dk':
-                        self.player_dict[(player_name, position, team)]['RealID'] = int(
-                            row['ID'])
                         self.player_dict[(player_name, position, team)]['ID'] = int(
-                            row['ID'][-3:])
-                    else:
-                        self.player_dict[(player_name, position, team)]['RealID'] = int(
                             row['ID'])
+                    else:
                         self.player_dict[(player_name, position, team)]['ID'] = int(
                             row['Id'].split('-')[1])
 
@@ -126,7 +122,6 @@ class NFL_Optimizer:
                     'ID': 0,
                     'Salary': int(row['Salary']),
                     'Name': row['Name'],
-                    'RealID': 0,
                     'Matchup': '',
                     'Team': team,
                     'Ownership': float(row['Own%']) if float(row['Own%']) != 0 else 0.1,
@@ -150,27 +145,27 @@ class NFL_Optimizer:
 
         # We want to create a variable for each roster slot.
         # There will be an index for each player and the variable will be binary (0 or 1) representing whether the player is included or excluded from the roster.
-        lp_variables = {self.player_dict[(player, pos_str, team)]['RealID']: plp.LpVariable(
-            str(self.player_dict[(player, pos_str, team)]['RealID']), cat='Binary'
+        lp_variables = {self.player_dict[(player, pos_str, team)]['ID']: plp.LpVariable(
+            str(self.player_dict[(player, pos_str, team)]['ID']), cat='Binary'
             ) for (player, pos_str, team) in self.player_dict}
 
         # set the objective - maximize fpts & set randomness amount from config
         if self.randomness_amount != 0:
             self.problem += plp.lpSum(np.random.normal(self.player_dict[(player, pos_str, team)]['Fpts'],
                                                         (self.player_dict[(player, pos_str, team)]['StdDev'] * self.randomness_amount / 100))
-                                        * lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+                                        * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                              for (player, pos_str, team) in self.player_dict), 'Objective'
         else:
-            self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Fpts'] * lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+            self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Fpts'] * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                              for (player, pos_str, team) in self.player_dict), 'Objective'
         
         # Set the salary constraints
         max_salary = 50000 if self.site == 'dk' else 60000
         min_salary = 45000 if self.site == 'dk' else 55000
         self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Salary'] *
-                                  lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in self.player_dict) <= max_salary, 'Max Salary'
+                                  lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict) <= max_salary, 'Max Salary'
         self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Salary'] *
-                                  lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in self.player_dict) >= min_salary, 'Min Salary'
+                                  lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict) >= min_salary, 'Min Salary'
 
         # Address limit rules if any
         for limit, groups in self.at_least.items():
@@ -180,7 +175,7 @@ class NFL_Optimizer:
                     if value['Name'] in group:
                         tuple_name_list.append(key)
                         
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                           for (player, pos_str, team) in tuple_name_list) >= int(limit), f'At least {limit} players {tuple_name_list}'
 
         for limit, groups in self.at_most.items():
@@ -190,17 +185,17 @@ class NFL_Optimizer:
                     if value['Name'] in group:
                         tuple_name_list.append(key)
                         
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                           for (player, pos_str, team) in tuple_name_list) <= int(limit), f'At most {limit} players {tuple_name_list}'
 
         # Address team limits
         for team, limit in self.team_limits.items():
-            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                       for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= int(limit), f'Team limit {team} {limit}'
 
         if self.global_team_limit is not None:
             for team in self.team_list:
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                           for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= int(self.global_team_limit), f'Global team limit {team} {self.global_team_limit}'
                 
         # Address matchup limits
@@ -210,7 +205,7 @@ class NFL_Optimizer:
                 for key, value in self.player_dict.items():
                     if value['Matchup'] == matchup:
                         players_in_game.append(key)
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in players_in_game) <= int(limit), f'Matchup limit {matchup} {limit}'
+                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) <= int(limit), f'Matchup limit {matchup} {limit}'
         
         if self.matchup_at_least is not None:
             for matchup, limit in self.matchup_limits.items():
@@ -218,7 +213,7 @@ class NFL_Optimizer:
                 for key, value in self.player_dict.items():
                     if value['Matchup'] == matchup:
                         players_in_game.append(key)
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
+                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
                     
         # Address stack rules
         for rule_type in self.stack_rules:
@@ -267,8 +262,8 @@ class NFL_Optimizer:
                                 stack_players_tuples.append(key)
 
                         # [sum of stackable players] + -n*[stack_player] >= 0
-                        self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in stack_players_tuples] 
-                                                  + [-count*lp_variables[self.player_dict[pos_key_player_tuple]['RealID']]]) >= 0, f'Stack rule {pos_key_player_tuple} {stack_players_tuples} {count}'
+                        self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in stack_players_tuples] 
+                                                  + [-count*lp_variables[self.player_dict[pos_key_player_tuple]['ID']]]) >= 0, f'Stack rule {pos_key_player_tuple} {stack_players_tuples} {count}'
                         
                 elif rule_type == 'limit':
                     limit_positions = rule['positions'] # ["RB"]
@@ -311,7 +306,7 @@ class NFL_Optimizer:
                                 if (value['Name'], value['Position'], value['Team']) in [(player['Name'], player['Position'], player['Team']) for player in limit_players]:
                                     limit_players_tuples.append(key)
                             
-                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in limit_players_tuples]) <= int(count), f'Limit rule {limit_players_tuples} {count}'
+                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples]) <= int(count), f'Limit rule {limit_players_tuples} {count}'
                         else:
                             unless_players = []
                             if unless_type == 'same-team':
@@ -346,42 +341,42 @@ class NFL_Optimizer:
                                     unless_players_tuples.append(key)
                                     
                             # [sum of limit players] + -count(unless_players)*[unless_players] <= n
-                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in limit_players_tuples]
-                                                    + [-1*[lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in unless_players_tuples]]) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
+                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples]
+                                                    + [-1*[lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in unless_players_tuples]]) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
                         
                         
         # Need exactly 1 QB
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                     for (player, pos_str, team) in self.player_dict if 'QB' == self.player_dict[(player, pos_str, team)]['Position']) == 1, f'QB limit 1'
 
         # Need at least 2 RB, up to 3 if using FLEX
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                     for (player, pos_str, team) in self.player_dict if 'RB' == self.player_dict[(player, pos_str, team)]['Position']) >= 2, f'RB >= 2'
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                     for (player, pos_str, team) in self.player_dict if 'RB' == self.player_dict[(player, pos_str, team)]['Position']) <= 3, f'RB <= 3'
 
         # Need at least 3 WR, up to 4 if using FLEX
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                     for (player, pos_str, team) in self.player_dict if 'WR' == self.player_dict[(player, pos_str, team)]['Position']) >= 3, f'WR >= 3'
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                     for (player, pos_str, team) in self.player_dict if 'WR' == self.player_dict[(player, pos_str, team)]['Position']) <= 4, f'WR <= 4'
 
         # Need at least 1 TE, up to 2 if using FLEX
         if self.use_double_te:
-            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                         for (player, pos_str, team) in self.player_dict if 'TE' == self.player_dict[(player, pos_str, team)]['Position']) >= 1, f'TE >= 1'
-            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                         for (player, pos_str, team) in self.player_dict if 'TE' == self.player_dict[(player, pos_str, team)]['Position']) <= 2, f'TE <= 2'
         else:
-            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                         for (player, pos_str, team) in self.player_dict if 'TE' == self.player_dict[(player, pos_str, team)]['Position']) == 1, f'TE == 1'
 
         # Need exactly 1 DST
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']]
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                     for (player, pos_str, team) in self.player_dict if 'DST' == self.player_dict[(player, pos_str, team)]['Position']) == 1, f'DST == 1'
 
         # Can only roster 9 total players
-        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['RealID']] for (player, pos_str, team) in self.player_dict) == 9, f'Total Players == 9'
+        self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict) == 9, f'Total Players == 9'
 
 
         # Crunch!
@@ -400,7 +395,7 @@ class NFL_Optimizer:
             print(player_ids)
             players = []
             for key, value in self.player_dict.items():
-                if value['RealID'] in player_ids:
+                if value['ID'] in player_ids:
                     players.append(value)
             print([p['Name'] for p in players])
             fpts = sum([player['Fpts'] for player in players])
@@ -442,14 +437,7 @@ class NFL_Optimizer:
         for fpts, lineup in self.lineups.items():
             if lineup not in unique.values():
                 unique[fpts] = lineup
-
-        # for fpts, lineup in self.lineups.items():
-        #     id_sum = sum(self.player_dict[player]['ID'] for player in lineup)
-        #     print(id_sum, lineup)
-        #     if lineup not in unique.values():
-        #         unique[id_sum] = (fpts, lineup)
-
-        # { 'id_sum': ('fpts', 'lineup')}
+        
         self.lineups = unique
         if self.num_uniques != 1:
             num_uniq_lineups = plp.OrderedDict(
@@ -474,96 +462,45 @@ class NFL_Optimizer:
         out_path = os.path.join(os.path.dirname(
             __file__), '../output/{}_optimal_lineups.csv'.format(self.site))
         with open(out_path, 'w') as f:
-            if self.site == 'dk':
-                f.write(
+            f.write(
                     'QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Salary,Fpts Proj,Ceiling,Own. Product,STDDEV\n')
-                for fpts, x in self.lineups.items():
-                    # print(id_sum, tple)
-                    salary = sum(
-                        self.player_dict[player]['Salary'] for player in x)
-                    fpts_p = sum(
-                        self.player_dict[player]['Fpts'] for player in x)
-                    own_p = np.prod(
-                        [self.player_dict[player]['Ownership'] for player in x])
-                    ceil = sum([self.player_dict[player]
-                               ['Ceiling'] for player in x])
-                    stddev = np.prod(
-                        [self.player_dict[player]['StdDev'] for player in x])
-                    # print(sum(self.player_dict[player]['Ownership'] for player in x))
-                    lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{}'.format(
-                        x[0].replace(
-                            '#', '-'), self.player_dict[x[0]]['RealID'],
-                        x[1].replace(
-                            '#', '-'), self.player_dict[x[1]]['RealID'],
-                        x[2].replace(
-                            '#', '-'), self.player_dict[x[2]]['RealID'],
-                        x[3].replace(
-                            '#', '-'), self.player_dict[x[3]]['RealID'],
-                        x[4].replace(
-                            '#', '-'), self.player_dict[x[4]]['RealID'],
-                        x[5].replace(
-                            '#', '-'), self.player_dict[x[5]]['RealID'],
-                        x[6].replace(
-                            '#', '-'), self.player_dict[x[6]]['RealID'],
-                        x[7].replace(
-                            '#', '-'), self.player_dict[x[7]]['RealID'],
-                        x[8].replace(
-                            '#', '-'), self.player_dict[x[8]]['RealID'],
-                        salary, round(
-                            fpts_p, 2), ceil, own_p, stddev
-                    )
-                    f.write('%s\n' % lineup_str)
-            else:
-                f.write(
-                    'PG,PG,SG,SG,SF,SF,PF,PF,C,Salary,Fpts Proj,Ceiling,Own. Product,Optimal%,Minutes,Boom%,Bust%,Leverage,FPPM,PPD,STDDEV\n')
-                for fpts, x in self.lineups.items():
-                    salary = sum(
-                        self.player_dict[player]['Salary'] for player in x)
-                    fpts_p = sum(
-                        self.player_dict[player]['Fpts'] for player in x)
-                    own_p = np.prod(
-                        [self.player_dict[player]['Ownership'] for player in x])
-                    ceil = np.prod([self.player_dict[player]
-                                   ['Ceiling'] for player in x])
-                    mins = np.prod([self.player_dict[player]
-                                   ['Minutes'] for player in x])
-                    boom = np.prod(
-                        [self.player_dict[player]['Boom'] for player in x])
-                    bust = np.prod(
-                        [self.player_dict[player]['Bust'] for player in x])
-                    optimal = np.prod(
-                        [self.player_dict[player]['Optimal'] for player in x])
-                    fppm = np.prod(
-                        [self.player_dict[player]['FPPM'] for player in x])
-                    ppd = np.prod(
-                        [self.player_dict[player]['PPD'] for player in x])
-                    stddev = np.prod(
-                        [self.player_dict[player]['StdDev'] for player in x])
-                    leverage = sum(self.player_dict[player]
-                                   ['Leverage'] for player in x)
-                    lineup_str = '{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{},{},{},{},{},{},{},{},{}'.format(
-                        self.player_dict[x[0]]['RealID'], x[0].replace(
-                            '#', '-'),
-                        self.player_dict[x[1]]['RealID'], x[1].replace(
-                            '#', '-'),
-                        self.player_dict[x[2]]['RealID'], x[2].replace(
-                            '#', '-'),
-                        self.player_dict[x[3]]['RealID'], x[3].replace(
-                            '#', '-'),
-                        self.player_dict[x[4]]['RealID'], x[4].replace(
-                            '#', '-'),
-                        self.player_dict[x[5]]['RealID'], x[5].replace(
-                            '#', '-'),
-                        self.player_dict[x[6]]['RealID'], x[6].replace(
-                            '#', '-'),
-                        self.player_dict[x[7]]['RealID'], x[7].replace(
-                            '#', '-'),
-                        self.player_dict[x[8]]['RealID'], x[8].replace(
-                            '#', '-'),
-                        salary, round(
-                            fpts_p, 2), ceil, own_p, optimal, mins, boom, bust, leverage, fppm, ppd, stddev
-                    )
-                    f.write('%s\n' % lineup_str)
+            for fpts, x in self.lineups.items():
+                # print(id_sum, tple)
+                salary = sum(
+                    self.player_dict[player]['Salary'] for player in x)
+                fpts_p = sum(
+                    self.player_dict[player]['Fpts'] for player in x)
+                own_p = np.prod(
+                    [self.player_dict[player]['Ownership'] for player in x])
+                ceil = sum([self.player_dict[player]
+                            ['Ceiling'] for player in x])
+                stddev = np.prod(
+                    [self.player_dict[player]['StdDev'] for player in x])
+                # print(sum(self.player_dict[player]['Ownership'] for player in x))
+                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{}'.format(
+                    x[0].replace(
+                        '#', '-'), self.player_dict[x[0]]['ID'],
+                    x[1].replace(
+                        '#', '-'), self.player_dict[x[1]]['ID'],
+                    x[2].replace(
+                        '#', '-'), self.player_dict[x[2]]['ID'],
+                    x[3].replace(
+                        '#', '-'), self.player_dict[x[3]]['ID'],
+                    x[4].replace(
+                        '#', '-'), self.player_dict[x[4]]['ID'],
+                    x[5].replace(
+                        '#', '-'), self.player_dict[x[5]]['ID'],
+                    x[6].replace(
+                        '#', '-'), self.player_dict[x[6]]['ID'],
+                    x[7].replace(
+                        '#', '-'), self.player_dict[x[7]]['ID'],
+                    x[8].replace(
+                        '#', '-'), self.player_dict[x[8]]['ID'],
+                    salary, round(
+                        fpts_p, 2), ceil, own_p, stddev
+                )
+                f.write('%s\n' % lineup_str)
+            
         print('Output done.')
 
     def format_lineups(self):
