@@ -103,9 +103,15 @@ class NFL_Optimizer:
             for row in reader:
                 player_name = row['Name'].replace('-', '#').lower().strip()
                 position = row['Position']
+                if position == 'D':
+                    position = 'DST'
+                    
                 team = row['Team']
                 if team in self.team_rename_dict:
                     team = self.team_rename_dict[team]
+                    
+                if team == 'JAX' and self.site == 'fd':
+                    team = 'JAC'
                 
                 stddev = row['StdDev'] if 'StdDev' in row else 0
                 if stddev == '':
@@ -194,9 +200,9 @@ class NFL_Optimizer:
                                       for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= int(limit), f'Team limit {team} {limit}'
 
         if self.global_team_limit is not None:
-            for team in self.team_list:
+            for limit_team in self.team_list:
                 self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                                          for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= int(self.global_team_limit), f'Global team limit {team} {self.global_team_limit}'
+                                          for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == limit_team) <= int(self.global_team_limit), f'Global team limit {limit_team} {self.global_team_limit}'
                 
         # Address matchup limits
         if self.matchup_limits is not None:
