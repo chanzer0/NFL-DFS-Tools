@@ -31,6 +31,9 @@ class NFL_Optimizer:
     use_double_te = True
     projection_minimum = 0
     randomness_amount = 0
+    team_rename_dict = {
+        "LA": "LAR"
+    }
 
     def __init__(self, site=None, num_lineups=0, num_uniques=1):
         self.site = site
@@ -49,32 +52,6 @@ class NFL_Optimizer:
             __file__), '../{}_data/{}'.format(site, self.config['player_path']))
         self.load_player_ids(player_path)
         
-        # threeJs_path = os.path.join(os.path.dirname(__file__), '../{}_data/{}'.format(site, '3j.csv'))
-        # self.load_3js(threeJs_path)
-        
-    # def load_3js(self, path):
-    #      with open(path, encoding='utf-8-sig') as file:
-    #         reader = csv.DictReader(file)
-    #         for row in reader:
-    #             player_name = row['Name'].replace('-', '#')
-    #             self.player_dict[player_name] = {}
-    #             self.player_dict[player_name]['Name'] = player_name
-    #             self.player_dict[player_name]['Fpts'] = float(row['Fpts'])
-    #             self.player_dict[player_name]['Position'] = row['Position']
-    #             self.player_dict[player_name]['Team'] = row['Team']
-    #             self.player_dict[player_name]['Opponent'] = row['Opponent']
-    #             self.player_dict[player_name]['Salary'] = int(row['Salary'].replace(',',''))
-                
-    #             if row['Team'] not in self.team_list:
-    #                 self.team_list.append(row['Team'])
-                    
-    #             if row['Team'] not in self.players_by_team:
-    #                 self.players_by_team[row['Team']] = {
-    #                     'QB': [], 'RB': [], 'WR': [], 'TE': [], 'DST': []
-    #                 }
-                
-    #             self.players_by_team[row['Team']][row['Position']].append(self.player_dict[player_name])
-                
 
     def flatten(self, list):
         return [item for sublist in list for item in sublist]
@@ -90,10 +67,14 @@ class NFL_Optimizer:
             reader = csv.DictReader(file)
             for row in reader:
                 name_key = 'Name' if self.site == 'dk' else 'Nickname'
-                player_name = row[name_key].replace('-', '#')
+                player_name = row[name_key].replace('-', '#').lower().strip()
+                team = row['TeamAbbrev']
                 if player_name in self.player_dict:
-                    self.player_dict[player_name]['Matchup'] = row['Game Info'].split(' ')[
-                        0]
+                    matchup =  row['Game Info'].split(' ')[0]
+                    teams = matchup.split('@')
+                    opponent = teams[0] if teams[0] != team else teams[1]
+                    self.player_dict[player_name]['Opponent'] = opponent
+                    self.player_dict[player_name]['Matchup'] = matchup
                     if self.site == 'dk':
                         self.player_dict[player_name]['RealID'] = int(
                             row['ID'])
@@ -114,6 +95,8 @@ class NFL_Optimizer:
         self.randomness_amount = float(self.config["randomness"])
         self.use_double_te = bool(self.config["use_double_te"])
         self.stack_rules = self.config["stack_rules"]
+        self.matchup_at_least = self.config["matchup_at_least"]
+        self.matchup_limits = self.config["matchup_limits"]
 
     # Load projections from file
     def load_projections(self, path):
@@ -121,33 +104,48 @@ class NFL_Optimizer:
         with open(path, encoding='utf-8-sig') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                player_name = row['Player'].replace('-', '#')
-                if float(row['DK Projection']) < self.projection_minimum and row['DK Position'] != 'DST':
+                player_name = row['Name'].replace('-', '#').lower().strip()
+                position = row['Position']
+                team = row['Team']
+                if team in self.team_rename_dict:
+                    team = self.team_rename_dict[team]
+                
+                stddev = row['StdDev'] if 'StdDev' in row else 0
+                if stddev == '':
+                    stddev = 0
+                else:
+                    stddev = float(stddev)
+                ceiling = row['Ceiling'] if 'Ceiling' in row else float(row['Fpts']) + stddev
+                
+                if ceiling == '':
+                    ceiling = float(row['Fpts']) + stddev
+                    
+                if float(row['Fpts']) < self.projection_minimum and row['Position'] != 'DST':
                     continue
+                
                 self.player_dict[player_name] = {
-                    'Fpts': float(row['DK Projection']),
-                    'Position': row['DK Position'],
+                    'Fpts': float(row['Fpts']),
+                    'Position': position,
                     'ID': 0,
-                    'Salary': int(row['DK Salary']),
-                    'Name': row['Player'],
+                    'Salary': int(row['Salary']),
+                    'Name': row['Name'],
                     'RealID': 0,
                     'Matchup': '',
-                    'Team': row['Team'],
-                    'Opponent': row['Opponent'],
-                    'Ownership': float(row['DK Ownership']) if float(row['DK Ownership']) != 0 else 0.1,
-                    'Ceiling': float(row['DK Ceiling']),
-                    'StdDev': float(row['DK Ceiling']) - float(row['DK Projection'])
+                    'Team': team,
+                    'Ownership': float(row['Own%']) if float(row['Own%']) != 0 else 0.1,
+                    'Ceiling': float(ceiling),
+                    'StdDev': stddev,
                 }
                 
-                if row['Team'] not in self.team_list:
-                    self.team_list.append(row['Team'])
+                if team not in self.team_list:
+                    self.team_list.append(team)
                     
-                if row['Team'] not in self.players_by_team:
-                    self.players_by_team[row['Team']] = {
+                if team not in self.players_by_team:
+                    self.players_by_team[team] = {
                         'QB': [], 'RB': [], 'WR': [], 'TE': [], 'DST': []
                     }
                 
-                self.players_by_team[row['Team']][row['Position']].append(self.player_dict[player_name])
+                self.players_by_team[team][position].append(self.player_dict[player_name])
 
     def optimize(self):
         # Setup our linear programming equation - https://en.wikipedia.org/wiki/Linear_programming
