@@ -430,7 +430,6 @@ class NFL_Optimizer:
                 if value['ID'] in player_ids:
                     players.append(key)
             fpts = sum([self.player_dict[player]['Fpts'] for player in players])
-            print(fpts, players)
             self.lineups[fpts] = players
             
             
