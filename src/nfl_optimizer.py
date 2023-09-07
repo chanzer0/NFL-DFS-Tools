@@ -131,6 +131,8 @@ class NFL_Optimizer:
                 else:
                     stddev = float(stddev)
                 ceiling = row['ceiling'] if 'ceiling' in row else row['fpts'] + stddev
+                if ceiling == '':
+                    ceiling = float(row['fpts']) + stddev
                 if float(row['fpts']) < self.projection_minimum and row['position'] != 'DST':
                     continue
                 
@@ -143,7 +145,7 @@ class NFL_Optimizer:
                     'Matchup': '',
                     'Team': team,
                     'Ownership': float(row['own%']) if float(row['own%']) != 0 else 0.1,
-                    'Ceiling': ceiling,
+                    'Ceiling': float(ceiling),
                     'StdDev': stddev,
                 }
                 
@@ -358,10 +360,6 @@ class NFL_Optimizer:
                                     unless_players_tuples.append(key)
                                     
                             # [sum of limit players] + -count(unless_players)*[unless_players] <= n
-                            print('limit_players_tuples')
-                            print(limit_players_tuples)
-                            print('unless_players_tuples')
-                            print(unless_players_tuples)
                                 
                             self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples] 
                                         - int(count) * plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in unless_players_tuples])) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
@@ -414,36 +412,18 @@ class NFL_Optimizer:
             # Get the lineup and add it to our list
             self.problem.writeLP('file.lp')
             player_ids = [player for player in lp_variables if lp_variables[player].varValue != 0]
-            print(player_ids)
             players = []
             for key, value in self.player_dict.items():
                 if value['ID'] in player_ids:
-                    players.append(value)
-            print([p['Name'] for p in players])
-            fpts = sum([player['Fpts'] for player in players])
-            print(fpts)
-            quit()
+                    players.append(key)
+            fpts = sum([self.player_dict[player]['Fpts'] for player in players])
             
-            score = str(self.problem.objective)
-            for v in self.problem.variables():
-                score = score.replace(v.name, str(v.varValue))
-
-            if i % 100 == 0:
-                print(i)
-            player_ids = [int(v.name) for v in self.problem.variables() if v.varValue != 0]
-            print(player_ids)
-            players=[]
-            for key, value in self.player_dict.items():
-                if value['ID'] in player_ids:
-                    players.append(value)
-            print([p['Name'] for p in players])
-            
-            
-            fpts = eval(score)
             self.lineups[fpts] = players
             
-            print(fpts, players)
-
+            
+            if i % 100 == 0:
+                print(i)
+           
             # Set a new random fpts projection within their distribution
             if self.randomness_amount != 0:
                 self.problem += plp.lpSum(np.random.normal(self.player_dict[(player, pos_str, team)]['Fpts'],
@@ -480,14 +460,13 @@ class NFL_Optimizer:
                     self.lineups[fpts] = lineup
 
         self.format_lineups()
-
+        
         out_path = os.path.join(os.path.dirname(
             __file__), '../output/{}_optimal_lineups.csv'.format(self.site))
         with open(out_path, 'w') as f:
             f.write(
                     'QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Salary,Fpts Proj,Ceiling,Own. Product,STDDEV\n')
             for fpts, x in self.lineups.items():
-                # print(id_sum, tple)
                 salary = sum(
                     self.player_dict[player]['Salary'] for player in x)
                 fpts_p = sum(
@@ -498,26 +477,16 @@ class NFL_Optimizer:
                             ['Ceiling'] for player in x])
                 stddev = np.prod(
                     [self.player_dict[player]['StdDev'] for player in x])
-                # print(sum(self.player_dict[player]['Ownership'] for player in x))
                 lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{}'.format(
-                    x[0].replace(
-                        '#', '-'), self.player_dict[x[0]]['ID'],
-                    x[1].replace(
-                        '#', '-'), self.player_dict[x[1]]['ID'],
-                    x[2].replace(
-                        '#', '-'), self.player_dict[x[2]]['ID'],
-                    x[3].replace(
-                        '#', '-'), self.player_dict[x[3]]['ID'],
-                    x[4].replace(
-                        '#', '-'), self.player_dict[x[4]]['ID'],
-                    x[5].replace(
-                        '#', '-'), self.player_dict[x[5]]['ID'],
-                    x[6].replace(
-                        '#', '-'), self.player_dict[x[6]]['ID'],
-                    x[7].replace(
-                        '#', '-'), self.player_dict[x[7]]['ID'],
-                    x[8].replace(
-                        '#', '-'), self.player_dict[x[8]]['ID'],
+                    self.player_dict[x[0]]['Name'], self.player_dict[x[0]]['ID'],
+                    self.player_dict[x[1]]['Name'], self.player_dict[x[1]]['ID'],
+                    self.player_dict[x[2]]['Name'], self.player_dict[x[2]]['ID'],
+                    self.player_dict[x[3]]['Name'], self.player_dict[x[3]]['ID'],
+                    self.player_dict[x[4]]['Name'], self.player_dict[x[4]]['ID'],
+                    self.player_dict[x[5]]['Name'], self.player_dict[x[5]]['ID'],
+                    self.player_dict[x[6]]['Name'], self.player_dict[x[6]]['ID'],
+                    self.player_dict[x[7]]['Name'], self.player_dict[x[7]]['ID'],
+                    self.player_dict[x[8]]['Name'], self.player_dict[x[8]]['ID'],
                     salary, round(
                         fpts_p, 2), ceil, own_p, stddev
                 )
@@ -526,81 +495,40 @@ class NFL_Optimizer:
         print('Output done.')
 
     def format_lineups(self):
-        if self.site == 'dk':
-            dk_roster = [['QB'], ['RB'], ['RB'], ['WR'], ['WR'], [
-                'WR'], ['TE'], ['RB', 'WR', 'TE'], ['DST']]
-            temp = self.lineups.items()
-            self.lineups = {}
-            for fpts, lineup in temp:
-                finalized = [None] * 9
-                z = 0
-                cond = False
-                while None in finalized:
-                    if cond:
-                        break
-                    indices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-                    shuffle(indices)
-                    for i in indices:
-                        if finalized[i] is None:
-                            eligible_players = []
-                            for player in lineup:
-                                if self.player_dict[player]['Position'] in dk_roster[i]:
-                                    eligible_players.append(player)
-                            selected = choice(eligible_players)
-                            # if there is an eligible player for this position not already in the finalized roster
-                            if any(player not in finalized for player in eligible_players):
-                                while selected in finalized:
-                                    selected = choice(eligible_players)
-                                finalized[i] = selected
-                            # this lineup combination is no longer feasible - retry
-                            else:
-                                z += 1
-                                if z == 1000:
-                                    cond = True
-                                    break
-
-                                shuffle(indices)
-                                finalized = [None] * 9
+        dk_roster = [['QB'], ['RB'], ['RB'], ['WR'], ['WR'], [
+            'WR'], ['TE'], ['RB', 'WR', 'TE'], ['DST']]
+        temp = self.lineups.items()
+        self.lineups = {}
+        for fpts, lineup in temp:
+            finalized = [None] * 9
+            z = 0
+            cond = False
+            while None in finalized:
+                if cond:
+                    break
+                indices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+                shuffle(indices)
+                for i in indices:
+                    if finalized[i] is None:
+                        eligible_players = []
+                        for player in lineup:
+                            if self.player_dict[player]['Position'] in dk_roster[i]:
+                                eligible_players.append(player)
+                        selected = choice(eligible_players)
+                        # if there is an eligible player for this position not already in the finalized roster
+                        if any(player not in finalized for player in eligible_players):
+                            while selected in finalized:
+                                selected = choice(eligible_players)
+                            finalized[i] = selected
+                        # this lineup combination is no longer feasible - retry
+                        else:
+                            z += 1
+                            if z == 1000:
+                                cond = True
                                 break
-                if not cond:
-                    self.lineups[fpts] = finalized
-        else:
-            fd_roster = [['PG'], ['PG'], ['SG'], ['SG'], ['SF'], [
-                'SF'], ['PF'], ['PF'], ['C']]
-            temp = self.lineups.items()
-            self.lineups = {}
-            for fpts, lineup in temp:
-                finalized = [None] * 9
-                z = 0
-                cond = False
-                infeasible = False
-                while None in finalized:
-                    if cond:
-                        break
-                    indices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-                    shuffle(indices)
-                    for i in indices:
-                        if finalized[i] is None:
-                            eligible_players = []
-                            for player in lineup:
-                                if any(pos in fd_roster[i] for pos in self.player_dict[player]['Position']):
-                                    eligible_players.append(player)
-                            selected = choice(eligible_players)
-                            # if there is an eligible player for this position not already in the finalized roster
-                            if any(player not in finalized for player in eligible_players):
-                                while selected in finalized:
-                                    selected = choice(eligible_players)
-                                finalized[i] = selected
-                            # this lineup combination is no longer feasible - retry
-                            else:
-                                z += 1
-                                if z == 1000:
-                                    cond = True
-                                    infeasible = True
-                                    break
 
-                                shuffle(indices)
-                                finalized = [None] * 9
-                                break
-                if not cond and not infeasible:
-                    self.lineups[fpts] = finalized
+                            shuffle(indices)
+                            finalized = [None] * 9
+                            break
+            if not cond:
+                self.lineups[fpts] = finalized
