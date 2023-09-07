@@ -68,20 +68,26 @@ class NFL_Optimizer:
             for row in reader:
                 name_key = 'Name' if self.site == 'dk' else 'Nickname'
                 player_name = row[name_key].replace('-', '#').lower().strip()
-                position = row['Roster Position'].split('/')[0]
-                team = row['TeamAbbrev']
+                position = row['Roster Position'].split('/')[0] if self.site == 'dk' else row['Position']
+                if position == 'D' and self.site == 'fd':
+                    position = 'DST'
+                team = row['TeamAbbrev'] if self.site == 'dk' else row['Team']
                 if (player_name, position, team) in self.player_dict:
-                    matchup =  row['Game Info'].split(' ')[0]
-                    teams = matchup.split('@')
-                    opponent = teams[0] if teams[0] != team else teams[1]
+                    if self.site == 'dk':
+                        matchup = row['Game Info'].split(' ')[0]
+                        teams = matchup.split('@')
+                        opponent = teams[0] if teams[0] != team else teams[1]
+                    elif self.site == 'fd':
+                        matchup = row['Game']
+                        teams = matchup.split('@')
+                        opponent = row['Opponent']
                     self.player_dict[(player_name, position, team)]['Opponent'] = opponent
                     self.player_dict[(player_name, position, team)]['Matchup'] = matchup
                     if self.site == 'dk':
                         self.player_dict[(player_name, position, team)]['ID'] = int(
                             row['ID'])
                     else:
-                        self.player_dict[(player_name, position, team)]['ID'] = int(
-                            row['Id'].split('-')[1])
+                        self.player_dict[(player_name, position, team)]['ID'] = row['Id']
 
     def load_rules(self):
         self.at_most = self.config["at_most"]
@@ -283,13 +289,12 @@ class NFL_Optimizer:
                         unless_positions = None
                         unless_type = None
                     
-                    opp_team = self.players_by_team[team]['QB'][0]['Opponent']
                     
                     # Iterate each team, less excluded teams, and apply the rule for each key player pos
                     for team in self.players_by_team:
+                        opp_team = self.players_by_team[team]['QB'][0]['Opponent']
                         if team in excluded_teams:
                             continue
-                        
                         limit_players = []
                         if stack_type == 'same-team':
                             for pos in limit_positions:
@@ -347,8 +352,13 @@ class NFL_Optimizer:
                                     unless_players_tuples.append(key)
                                     
                             # [sum of limit players] + -count(unless_players)*[unless_players] <= n
-                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples]
-                                                    + [-1*[lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in unless_players_tuples]]) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
+                            print('limit_players_tuples')
+                            print(limit_players_tuples)
+                            print('unless_players_tuples')
+                            print(unless_players_tuples)
+                                
+                            self.problem += plp.lpSum([lp_variables[self.player_dict[limit_tuple]['ID']] for limit_tuple in limit_players_tuples]
+                                                    + [-1*[lp_variables[self.player_dict[unless_tuple]['ID']] for unless_tuple in unless_players_tuples]]) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
                         
                         
         # Need exactly 1 QB
