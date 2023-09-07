@@ -6,8 +6,9 @@ import pytz
 import timedelta
 import numpy as np
 import pulp as plp
-from itertools import groupby
+import itertools
 from random import shuffle, choice
+
 
 
 class NFL_Optimizer:
@@ -56,6 +57,10 @@ class NFL_Optimizer:
     def flatten(self, list):
         return [item for sublist in list for item in sublist]
 
+    # make column lookups on datafiles case insensitive
+    def lower_first(self, iterator):
+        return itertools.chain([next(iterator).lower()], iterator)
+
     # Load config from file
     def load_config(self):
         with open(os.path.join(os.path.dirname(__file__), '../config.json')) as json_file:
@@ -64,30 +69,30 @@ class NFL_Optimizer:
     # Load player IDs for exporting
     def load_player_ids(self, path):
         with open(path) as file:
-            reader = csv.DictReader(file)
+            reader = csv.DictReader(self.lower_first(file))
             for row in reader:
-                name_key = 'Name' if self.site == 'dk' else 'Nickname'
+                name_key = 'name' if self.site == 'dk' else 'nickname'
                 player_name = row[name_key].replace('-', '#').lower().strip()
-                position = row['Roster Position'].split('/')[0] if self.site == 'dk' else row['Position']
+                position = row['roster position'].split('/')[0] if self.site == 'dk' else row['position']
                 if position == 'D' and self.site == 'fd':
                     position = 'DST'
-                team = row['TeamAbbrev'] if self.site == 'dk' else row['Team']
+                team = row['teamabbrev'] if self.site == 'dk' else row['team']
                 if (player_name, position, team) in self.player_dict:
                     if self.site == 'dk':
-                        matchup = row['Game Info'].split(' ')[0]
+                        matchup = row['game info'].split(' ')[0]
                         teams = matchup.split('@')
                         opponent = teams[0] if teams[0] != team else teams[1]
                     elif self.site == 'fd':
-                        matchup = row['Game']
+                        matchup = row['game']
                         teams = matchup.split('@')
-                        opponent = row['Opponent']
+                        opponent = row['opponent']
                     self.player_dict[(player_name, position, team)]['Opponent'] = opponent
                     self.player_dict[(player_name, position, team)]['Matchup'] = matchup
                     if self.site == 'dk':
                         self.player_dict[(player_name, position, team)]['ID'] = int(
-                            row['ID'])
+                            row['id'])
                     else:
-                        self.player_dict[(player_name, position, team)]['ID'] = row['Id']
+                        self.player_dict[(player_name, position, team)]['ID'] = row['id']
 
     def load_rules(self):
         self.at_most = self.config["at_most"]
@@ -105,38 +110,38 @@ class NFL_Optimizer:
     def load_projections(self, path):
         # Read projections into a dictionary
         with open(path, encoding='utf-8-sig') as file:
-            reader = csv.DictReader(file)
+            reader = csv.DictReader(self.lower_first(file))
             for row in reader:
-                player_name = row['Name'].replace('-', '#').lower().strip()
-                position = row['Position']
+                player_name = row['name'].replace('-', '#').lower().strip()
+                position = row['position']
                 if position == 'D':
                     position = 'DST'
                     
-                team = row['Team']
+                team = row['team']
                 if team in self.team_rename_dict:
                     team = self.team_rename_dict[team]
                     
                 if team == 'JAX' and self.site == 'fd':
                     team = 'JAC'
                 
-                stddev = row['StdDev'] if 'StdDev' in row else 0
+                stddev = row['stddev'] if 'stddev' in row else 0
                 if stddev == '':
                     stddev = 0
                 else:
                     stddev = float(stddev)
-                ceiling = row['Ceiling'] if 'Ceiling' in row else row['Fpts'] + stddev
-                if float(row['Fpts']) < self.projection_minimum and row['Position'] != 'DST':
+                ceiling = row['ceiling'] if 'ceiling' in row else row['fpts'] + stddev
+                if float(row['fpts']) < self.projection_minimum and row['position'] != 'DST':
                     continue
                 
                 self.player_dict[(player_name, position, team)] = {
-                    'Fpts': float(row['Fpts']),
+                    'Fpts': float(row['fpts']),
                     'Position': position,
                     'ID': 0,
-                    'Salary': int(row['Salary']),
-                    'Name': row['Name'],
+                    'Salary': int(row['salary']),
+                    'Name': row['name'],
                     'Matchup': '',
                     'Team': team,
-                    'Ownership': float(row['Own%']) if float(row['Own%']) != 0 else 0.1,
+                    'Ownership': float(row['own%']) if float(row['own%']) != 0 else 0.1,
                     'Ceiling': ceiling,
                     'StdDev': stddev,
                 }
@@ -357,8 +362,8 @@ class NFL_Optimizer:
                             print('unless_players_tuples')
                             print(unless_players_tuples)
                                 
-                            self.problem += plp.lpSum([lp_variables[self.player_dict[limit_tuple]['ID']] for limit_tuple in limit_players_tuples]
-                                                    + [-1*[lp_variables[self.player_dict[unless_tuple]['ID']] for unless_tuple in unless_players_tuples]]) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
+                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples] 
+                                        - int(count) * plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in unless_players_tuples])) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
                         
                         
         # Need exactly 1 QB

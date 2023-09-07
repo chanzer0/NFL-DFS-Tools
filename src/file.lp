@@ -158,18 +158,18 @@ Global_team_limit_WAS_5: 28792201 + 28792327 + 28792331 + 28792481 + 28792635
 Limit_rule__("d'andre_swift",_'RB',_'PHI'),_('kenneth_gainwell',_'RB',_'PHI'),_('rashaad_penny',_'RB',_'PHI'),_('boston_scott',_'RB',_'PHI')__1:
  28792317 + 28792335 + 28792381 + 28792391 <= 1
 Limit_rule__("ja'marr_chase",_'WR',_'CIN'),_('tee_higgins',_'WR',_'CIN'),_('irv_smith_jr.',_'TE',_'CIN'),_('tyler_boyd',_'WR',_'CIN'),_('trenton_irwin',_'WR',_'CIN'),_('mitchell_wilcox',_'TE',_'CIN'),_('drew_sample',_'TE',_'CIN'),_('andrei_iosivas',_'WR',_'CIN')__unless__('deshaun_watson',_'QB',_'CLE'),_('joe_burrow',_'QB',_'CIN')__1:
- 28792609 + 28792625 + 28792715 + 28793163 + 28793165 + 28793281 + 28793527
- + 28793529 <= 1
+ - 28792181 - 28792187 + 28792609 + 28792625 + 28792715 + 28793163 + 28793165
+ + 28793281 + 28793527 + 28793529 <= 1
 Limit_rule__('aaron_jones',_'RB',_'GB'),_('aj_dillon',_'RB',_'GB')__1:
  28792297 + 28792325 <= 1
 Limit_rule__('alec_pierce',_'WR',_'IND'),_('michael_pittman_jr.',_'WR',_'IND'),_('josh_downs',_'WR',_'IND'),_('kylen_granson',_'TE',_'IND'),_('isaiah_mckenzie',_'WR',_'IND'),_('mo_alie#cox',_'TE',_'IND'),_('will_mallory',_'TE',_'IND'),_('drew_ogletree',_'TE',_'IND')__unless__('anthony_richardson',_'QB',_'IND'),_('trevor_lawrence',_'QB',_'JAX')__1:
- 28792639 + 28792725 + 28792761 + 28792771 + 28793309 + 28793511 + 28793513
- + 28793517 <= 1
+ - 28792184 - 28792191 + 28792639 + 28792725 + 28792761 + 28792771 + 28793309
+ + 28793511 + 28793513 + 28793517 <= 1
 Limit_rule__('alexander_mattison',_'RB',_'MIN'),_('ty_chandler',_'RB',_'MIN'),_('myles_gaskin',_'RB',_'MIN'),_('c.j._ham',_'RB',_'MIN')__1:
  28792293 + 28792369 + 28792437 + 28792535 <= 1
 Limit_rule__('amari_cooper',_'WR',_'CLE'),_('david_njoku',_'TE',_'CLE'),_('elijah_moore',_'WR',_'CLE'),_('donovan_peoples#jones',_'WR',_'CLE'),_('jordan_akins',_'TE',_'CLE'),_('harrison_bryant',_'TE',_'CLE'),_('marquise_goodwin',_'WR',_'CLE'),_('david_bell',_'WR',_'CLE'),_('cedric_tillman',_'WR',_'CLE')__unless__('deshaun_watson',_'QB',_'CLE'),_('joe_burrow',_'QB',_'CIN')__1:
- 28792647 + 28792707 + 28792727 + 28792763 + 28793141 + 28793143 + 28793269
- + 28793329 + 28793521 <= 1
+ - 28792181 - 28792187 + 28792647 + 28792707 + 28792727 + 28792763 + 28793141
+ + 28793143 + 28793269 + 28793329 + 28793521 <= 1
 Limit_rule__('antonio_gibson',_'RB',_'WAS'),_('brian_robinson_jr.',_'RB',_'WAS'),_('chris_rodriguez_jr.',_'RB',_'WAS')__1:
  28792327 + 28792331 + 28792481 <= 1
 Limit_rule__('austin_ekeler',_'RB',_'LAC'),_('joshua_kelley',_'RB',_'LAC'),_('isaiah_spiller',_'RB',_'LAC'),_('elijah_dotson',_'RB',_'LAC')__1:
@@ -177,56 +177,56 @@ Limit_rule__('austin_ekeler',_'RB',_'LAC'),_('joshua_kelley',_'RB',_'LAC'),_('is
 Limit_rule__('bijan_robinson',_'RB',_'ATL'),_('tyler_allgeier',_'RB',_'ATL'),_('cordarrelle_patterson',_'RB',_'ATL'),_('keith_smith',_'RB',_'ATL')__1:
  28792275 + 28792319 + 28792343 + 28792601 <= 1
 Limit_rule__('calvin_ridley',_'WR',_'JAX'),_('christian_kirk',_'WR',_'JAX'),_('zay_jones',_'WR',_'JAX'),_('evan_engram',_'TE',_'JAX'),_('jamal_agnew',_'WR',_'JAX'),_('luke_farrell',_'TE',_'JAX'),_('brenton_strange',_'TE',_'JAX'),_('tim_jones',_'WR',_'JAX')__unless__('anthony_richardson',_'QB',_'IND'),_('trevor_lawrence',_'QB',_'JAX')__1:
- 28792633 + 28792651 + 28792697 + 28793099 + 28793103 + 28793259 + 28793499
- + 28793501 <= 1
+ - 28792184 - 28792191 + 28792633 + 28792651 + 28792697 + 28793099 + 28793103
+ + 28793259 + 28793499 + 28793501 <= 1
 Limit_rule__('cam_akers',_'RB',_'LAR'),_('kyren_williams',_'RB',_'LAR'),_('zach_evans',_'RB',_'LAR')__1:
  28792299 + 28792407 + 28792417 <= 1
 Limit_rule__('chris_godwin',_'WR',_'TB'),_('trey_palmer',_'WR',_'TB'),_('cade_otton',_'TE',_'TB'),_('mike_evans',_'WR',_'TB'),_('ko_kieft',_'TE',_'TB'),_('deven_thompkins',_'WR',_'TB'),_('payne_durham',_'TE',_'TB'),_('rakim_jarrett',_'WR',_'TB')__unless__('kirk_cousins',_'QB',_'MIN'),_('baker_mayfield',_'QB',_'TB')__1:
- 28792637 + 28792645 + 28793063 + 28793065 + 28793073 + 28793287 + 28793477
- + 28793479 <= 1
+ - 28792185 - 28792202 + 28792637 + 28792645 + 28793063 + 28793065 + 28793073
+ + 28793287 + 28793477 + 28793479 <= 1
 Limit_rule__('chris_olave',_'WR',_'NO'),_('michael_thomas',_'WR',_'NO'),_('rashid_shaheed',_'WR',_'NO'),_('juwan_johnson',_'TE',_'NO'),_('taysom_hill',_'TE',_'NO'),_('foster_moreau',_'TE',_'NO'),_('jimmy_graham',_'TE',_'NO'),_('a.t._perry',_'WR',_'NO'),_('keith_kirkwood',_'WR',_'NO')__unless__('derek_carr',_'QB',_'NO'),_('ryan_tannehill',_'QB',_'TEN')__1:
- 28792631 + 28792665 + 28792731 + 28793025 + 28793031 + 28793275 + 28793279
- + 28793321 + 28793457 <= 1
+ - 28792196 - 28792198 + 28792631 + 28792665 + 28792731 + 28793025 + 28793031
+ + 28793275 + 28793279 + 28793321 + 28793457 <= 1
 Limit_rule__('christian_mccaffrey',_'RB',_'SF'),_('elijah_mitchell',_'RB',_'SF'),_('kyle_juszczyk',_'RB',_'SF'),_('tyrion_davis#price',_'RB',_'SF'),_('jordan_mason',_'RB',_'SF')__1:
  28792269 + 28792337 + 28792357 + 28792493 + 28792501 <= 1
 Limit_rule__('christian_watson',_'WR',_'GB'),_('luke_musgrave',_'TE',_'GB'),_('jayden_reed',_'WR',_'GB'),_('romeo_doubs',_'WR',_'GB'),_('josiah_deguara',_'TE',_'GB'),_('tucker_kraft',_'TE',_'GB'),_('samori_toure',_'WR',_'GB'),_('dontayvion_wicks',_'WR',_'GB'),_('malik_heath',_'WR',_'GB')__unless__('jordan_love',_'QB',_'GB'),_('justin_fields',_'QB',_'CHI')__1:
- 28792643 + 28792703 + 28792917 + 28792919 + 28792921 + 28792927 + 28793311
- + 28793399 + 28793401 <= 1
+ - 28792180 - 28792200 + 28792643 + 28792703 + 28792917 + 28792919 + 28792921
+ + 28792927 + 28793311 + 28793399 + 28793401 <= 1
 Limit_rule__('courtland_sutton',_'WR',_'DEN'),_('greg_dulcich',_'TE',_'DEN'),_('marvin_mims_jr.',_'WR',_'DEN'),_('adam_trautman',_'TE',_'DEN'),_('brandon_johnson',_'WR',_'DEN'),_('phillip_dorsett_ii',_'WR',_'DEN'),_('chris_manhertz',_'TE',_'DEN')__unless__('russell_wilson',_'QB',_'DEN'),_('jimmy_garoppolo',_'QB',_'LV')__1:
- 28792661 + 28792891 + 28792901 + 28792907 + 28793273 + 28793389 + 28793391
- <= 1
+ - 28792188 - 28792195 + 28792661 + 28792891 + 28792901 + 28792907 + 28793273
+ + 28793389 + 28793391 <= 1
 Limit_rule__('dallas_goedert',_'TE',_'PHI'),_('devonta_smith',_'WR',_'PHI'),_('a.j._brown',_'WR',_'PHI'),_('quez_watkins',_'WR',_'PHI'),_('olamide_zaccheaus',_'WR',_'PHI'),_('grant_calcaterra',_'TE',_'PHI'),_('jack_stoll',_'TE',_'PHI')__unless__('jalen_hurts',_'QB',_'PHI'),_('mac_jones',_'QB',_'NE')__1:
- 28792613 + 28792617 + 28792739 + 28792821 + 28793255 + 28793347 + 28793349
- <= 1
+ - 28792179 - 28792199 + 28792613 + 28792617 + 28792739 + 28792821 + 28793255
+ + 28793347 + 28793349 <= 1
 Limit_rule__('dameon_pierce',_'RB',_'HOU'),_('devin_singletary',_'RB',_'HOU'),_('andrew_beck',_'RB',_'HOU'),_('dare_ogunbowale',_'RB',_'HOU'),_('mike_boone',_'RB',_'HOU')__1:
  28792305 + 28792361 + 28792573 + 28792575 + 28792583 <= 1
 Limit_rule__('davante_adams',_'WR',_'LV'),_('jakobi_meyers',_'WR',_'LV'),_('michael_mayer',_'TE',_'LV'),_('hunter_renfrow',_'WR',_'LV'),_('austin_hooper',_'TE',_'LV'),_('tre_tucker',_'WR',_'LV'),_('jesper_horsted',_'TE',_'LV'),_('deandre_carter',_'WR',_'LV')__unless__('russell_wilson',_'QB',_'DEN'),_('jimmy_garoppolo',_'QB',_'LV')__1:
- 28792611 + 28792685 + 28792691 + 28792751 + 28792889 + 28793301 + 28793317
- + 28793383 <= 1
+ - 28792188 - 28792195 + 28792611 + 28792685 + 28792691 + 28792751 + 28792889
+ + 28793301 + 28793317 + 28793383 <= 1
 Limit_rule__('deebo_samuel',_'WR',_'SF'),_('brandon_aiyuk',_'WR',_'SF'),_('george_kittle',_'TE',_'SF'),_('jauan_jennings',_'WR',_'SF'),_('ross_dwelley',_'TE',_'SF'),_('charlie_woerner',_'TE',_'SF'),_('ronnie_bell',_'WR',_'SF')__unless__('kenny_pickett',_'QB',_'PIT'),_('brock_purdy',_'QB',_'SF')__1:
- 28792653 + 28792681 + 28792753 + 28792997 + 28793253 + 28793441 + 28793443
- <= 1
+ - 28792193 - 28792197 + 28792653 + 28792681 + 28792753 + 28792997 + 28793253
+ + 28793441 + 28793443 <= 1
 Limit_rule__('deon_jackson',_'RB',_'IND'),_('evan_hull',_'RB',_'IND')__1:
  28792411 + 28792545 <= 1
 Limit_rule__('derrick_henry',_'RB',_'TEN'),_('tyjae_spears',_'RB',_'TEN'),_('julius_chestnut',_'RB',_'TEN')__1:
  28792279 + 28792349 + 28792521 <= 1
 Limit_rule__('diontae_johnson',_'WR',_'PIT'),_('pat_freiermuth',_'TE',_'PIT'),_('george_pickens',_'WR',_'PIT'),_('allen_robinson_ii',_'WR',_'PIT'),_('darnell_washington',_'TE',_'PIT'),_('connor_heyward',_'TE',_'PIT'),_('calvin_austin_iii',_'WR',_'PIT'),_('gunner_olszewski',_'WR',_'PIT'),_('miles_boykin',_'WR',_'PIT')__unless__('kenny_pickett',_'QB',_'PIT'),_('brock_purdy',_'QB',_'SF')__1:
- 28792657 + 28792671 + 28792729 + 28793007 + 28793009 + 28793011 + 28793271
- + 28793449 + 28793453 <= 1
+ - 28792193 - 28792197 + 28792657 + 28792671 + 28792729 + 28793007 + 28793009
+ + 28793011 + 28793271 + 28793449 + 28793453 <= 1
 Limit_rule__('dj_moore',_'WR',_'CHI'),_('chase_claypool',_'WR',_'CHI'),_('darnell_mooney',_'WR',_'CHI'),_('cole_kmet',_'TE',_'CHI'),_('robert_tonyan',_'TE',_'CHI'),_('marcedes_lewis',_'TE',_'CHI'),_('equanimeous_st._brown',_'WR',_'CHI'),_('tyler_scott',_'WR',_'CHI'),_('velus_jones_jr.',_'WR',_'CHI')__unless__('jordan_love',_'QB',_'GB'),_('justin_fields',_'QB',_'CHI')__1:
- 28792641 + 28792695 + 28792743 + 28792935 + 28792937 + 28792941 + 28793265
- + 28793297 + 29001068 <= 1
+ - 28792180 - 28792200 + 28792641 + 28792695 + 28792743 + 28792935 + 28792937
+ + 28792941 + 28793265 + 28793297 + 29001068 <= 1
 Limit_rule__('drake_london',_'WR',_'ATL'),_('kyle_pitts',_'TE',_'ATL'),_('mack_hollins',_'WR',_'ATL'),_('jonnu_smith',_'TE',_'ATL'),_('khadarel_hodge',_'WR',_'ATL'),_('mycole_pruitt',_'TE',_'ATL'),_('scotty_miller',_'WR',_'ATL')__unless__('desmond_ridder',_'QB',_'ATL'),_('bryce_young',_'QB',_'CAR')__1:
- 28792655 + 28792723 + 28792777 + 28793231 + 28793263 + 28793323 + 28793565
- <= 1
+ - 28792192 - 28792204 + 28792655 + 28792723 + 28792777 + 28793231 + 28793263
+ + 28793323 + 28793565 <= 1
 Limit_rule__('hayden_hurst',_'TE',_'CAR'),_('dj_chark_jr.',_'WR',_'CAR'),_('jonathan_mingo',_'WR',_'CAR'),_('adam_thielen',_'WR',_'CAR'),_('ian_thomas',_'TE',_'CAR'),_('tommy_tremble',_'TE',_'CAR'),_('laviska_shenault_jr.',_'WR',_'CAR'),_('giovanni_ricci',_'TE',_'CAR'),_('terrace_marshall_jr.',_'WR',_'CAR'),_('ihmir_smith#marsette',_'WR',_'CAR')__unless__('desmond_ridder',_'QB',_'ATL'),_('bryce_young',_'QB',_'CAR')__1:
- 28792693 + 28792721 + 28792745 + 28792765 + 28792775 + 28793305 + 28793557
- + 28793559 + 28793561 + 29276428 <= 1
+ - 28792192 - 28792204 + 28792693 + 28792721 + 28792745 + 28792765 + 28792775
+ + 28793305 + 28793557 + 28793559 + 28793561 + 29276428 <= 1
 Limit_rule__('j.k._dobbins',_'RB',_'BAL'),_('gus_edwards',_'RB',_'BAL'),_('justice_hill',_'RB',_'BAL'),_('patrick_ricard',_'RB',_'BAL')__1:
  28792291 + 28792379 + 28792563 + 28792569 <= 1
 Limit_rule__('jahan_dotson',_'WR',_'WAS'),_('curtis_samuel',_'WR',_'WAS'),_('terry_mclaurin',_'WR',_'WAS'),_('logan_thomas',_'TE',_'WAS'),_('cole_turner',_'TE',_'WAS'),_('dyami_brown',_'WR',_'WAS'),_('john_bates',_'TE',_'WAS'),_('dax_milne',_'WR',_'WAS'),_('byron_pringle',_'WR',_'WAS')__unless__('sam_howell',_'QB',_'WAS'),_('joshua_dobbs',_'QB',_'ARI')__1:
- 28792635 + 28792669 + 28792709 + 28792955 + 28792957 + 28792959 + 28793289
- + 28793417 + 28793419 <= 1
+ - 28792201 - 28792221 + 28792635 + 28792669 + 28792709 + 28792955 + 28792957
+ + 28792959 + 28793289 + 28793417 + 28793419 <= 1
 Limit_rule__('jamaal_williams',_'RB',_'NO'),_('kendre_miller',_'RB',_'NO')__1:
  28792333 + 28792385 <= 1
 Limit_rule__('james_conner',_'RB',_'ARI'),_('keaontay_ingram',_'RB',_'ARI')__1:
@@ -236,24 +236,24 @@ Limit_rule__('joe_mixon',_'RB',_'CIN'),_('chris_evans',_'RB',_'CIN'),_('trayveon
 Limit_rule__('josh_jacobs',_'RB',_'LV'),_('ameer_abdullah',_'RB',_'LV'),_('zamir_white',_'RB',_'LV'),_('brandon_bolden',_'RB',_'LV')__1:
  28792281 + 28792355 + 28792409 + 28792447 <= 1
 Limit_rule__('juju_smith#schuster',_'WR',_'NE'),_('kendrick_bourne',_'WR',_'NE'),_('hunter_henry',_'TE',_'NE'),_('devante_parker',_'WR',_'NE'),_('demario_douglas',_'WR',_'NE'),_('mike_gesicki',_'TE',_'NE'),_('kayshon_boutte',_'WR',_'NE'),_('ty_montgomery_ii',_'WR',_'NE')__unless__('jalen_hurts',_'QB',_'PHI'),_('mac_jones',_'QB',_'NE')__1:
- 28792683 + 28792699 + 28792713 + 28792747 + 28792841 + 28792843 + 28793283
- + 28793293 <= 1
+ - 28792179 - 28792199 + 28792683 + 28792699 + 28792713 + 28792747 + 28792841
+ + 28792843 + 28793283 + 28793293 <= 1
 Limit_rule__('justin_jefferson',_'WR',_'MIN'),_('t.j._hockenson',_'TE',_'MIN'),_('jordan_addison',_'WR',_'MIN'),_('k.j._osborn',_'WR',_'MIN'),_('josh_oliver',_'TE',_'MIN'),_('johnny_mundt',_'TE',_'MIN'),_('jalen_nailor',_'WR',_'MIN'),_('brandon_powell',_'WR',_'MIN')__unless__('kirk_cousins',_'QB',_'MIN'),_('baker_mayfield',_'QB',_'TB')__1:
- 28792603 + 28792667 + 28792705 + 28793081 + 28793083 + 28793251 + 28793487
- + 28793489 <= 1
+ - 28792185 - 28792202 + 28792603 + 28792667 + 28792705 + 28793081 + 28793083
+ + 28793251 + 28793487 + 28793489 <= 1
 Limit_rule__('kenneth_walker_iii',_'RB',_'SEA'),_('zach_charbonnet',_'RB',_'SEA'),_('deejay_dallas',_'RB',_'SEA')__1:
  28792303 + 28792351 + 28792405 <= 1
 Limit_rule__('khalil_herbert',_'RB',_'CHI'),_('roschon_johnson',_'RB',_'CHI'),_("d'onta_foreman",_'RB',_'CHI')__1:
  28792311 + 28792323 + 28792375 <= 1
 Limit_rule__('mark_andrews',_'TE',_'BAL'),_('zay_flowers',_'WR',_'BAL'),_('odell_beckham_jr.',_'WR',_'BAL'),_('rashod_bateman',_'WR',_'BAL'),_('isaiah_likely',_'TE',_'BAL'),_('nelson_agholor',_'WR',_'BAL'),_('devin_duvernay',_'WR',_'BAL'),_('charlie_kolar',_'TE',_'BAL')__unless__('lamar_jackson',_'QB',_'BAL'),_('c.j._stroud',_'QB',_'HOU')__1:
- 28792659 + 28792675 + 28792719 + 28792773 + 28793179 + 28793249 + 28793303
- + 28793541 <= 1
+ - 28792178 - 28792194 + 28792659 + 28792675 + 28792719 + 28792773 + 28793179
+ + 28793249 + 28793303 + 28793541 <= 1
 Limit_rule__('marquise_brown',_'WR',_'ARI'),_('rondale_moore',_'WR',_'ARI'),_('trey_mcbride',_'TE',_'ARI'),_('michael_wilson',_'WR',_'ARI'),_('geoff_swaim',_'TE',_'ARI'),_('zach_pascal',_'WR',_'ARI'),_('greg_dortch',_'WR',_'ARI')__unless__('sam_howell',_'QB',_'WAS'),_('joshua_dobbs',_'QB',_'ARI')__1:
- 28792663 + 28792711 + 28792737 + 28792975 + 28792977 + 28793299 + 28793429
- <= 1
+ - 28792201 - 28792221 + 28792663 + 28792711 + 28792737 + 28792975 + 28792977
+ + 28793299 + 28793429 <= 1
 Limit_rule__('mike_williams',_'WR',_'LAC'),_('keenan_allen',_'WR',_'LAC'),_('joshua_palmer',_'WR',_'LAC'),_('gerald_everett',_'TE',_'LAC'),_('donald_parham_jr.',_'TE',_'LAC'),_('quentin_johnston',_'WR',_'LAC'),_("tre'_mckitty",_'TE',_'LAC'),_('stone_smartt',_'TE',_'LAC'),_('derius_davis',_'WR',_'LAC')__unless__('justin_herbert',_'QB',_'LAC'),_('tua_tagovailoa',_'QB',_'MIA')__1:
- 28792615 + 28792649 + 28792701 + 28792717 + 28792859 + 28793267 + 28793327
- + 28793363 + 28793365 <= 1
+ - 28792182 - 28792183 + 28792615 + 28792649 + 28792701 + 28792717 + 28792859
+ + 28793267 + 28793327 + 28793363 + 28793365 <= 1
 Limit_rule__('miles_sanders',_'RB',_'CAR'),_('chuba_hubbard',_'RB',_'CAR'),_('raheem_blackshear',_'RB',_'CAR')__1:
  28792309 + 28792341 + 28792585 <= 1
 Limit_rule__('najee_harris',_'RB',_'PIT'),_('jaylen_warren',_'RB',_'PIT'),_('anthony_mcfarland_jr.',_'RB',_'PIT')__1:
@@ -261,11 +261,11 @@ Limit_rule__('najee_harris',_'RB',_'PIT'),_('jaylen_warren',_'RB',_'PIT'),_('ant
 Limit_rule__('nick_chubb',_'RB',_'CLE'),_('jerome_ford',_'RB',_'CLE'),_('pierre_strong_jr.',_'RB',_'CLE')__1:
  28792273 + 28792393 + 28792403 <= 1
 Limit_rule__('nico_collins',_'WR',_'HOU'),_('noah_brown',_'WR',_'HOU'),_('dalton_schultz',_'TE',_'HOU'),_('robert_woods',_'WR',_'HOU'),_('teagan_quitoriano',_'TE',_'HOU'),_('brevin_jordan',_'TE',_'HOU'),_('tank_dell',_'WR',_'HOU'),_('john_metchie_iii',_'WR',_'HOU')__unless__('lamar_jackson',_'QB',_'BAL'),_('c.j._stroud',_'QB',_'HOU')__1:
- 28792677 + 28792689 + 28792735 + 28793197 + 28793199 + 28793261 + 28793547
- + 28793549 <= 1
+ - 28792178 - 28792194 + 28792677 + 28792689 + 28792735 + 28793197 + 28793199
+ + 28793261 + 28793547 + 28793549 <= 1
 Limit_rule__('noah_fant',_'TE',_'SEA'),_('dk_metcalf',_'WR',_'SEA'),_('tyler_lockett',_'WR',_'SEA'),_('will_dissly',_'TE',_'SEA'),_('jaxon_smith#njigba',_'WR',_'SEA'),_('colby_parkinson',_'TE',_'SEA'),_('jake_bobo',_'WR',_'SEA'),_('dareke_young',_'WR',_'SEA'),_('cody_thompson',_'WR',_'SEA')__unless__('geno_smith',_'QB',_'SEA'),_('matthew_stafford',_'QB',_'LAR')__1:
- 28792621 + 28792627 + 28792679 + 28792787 + 28792789 + 28792795 + 28793295
- + 28793325 + 28793331 <= 1
+ - 28792186 - 28792190 + 28792621 + 28792627 + 28792679 + 28792787 + 28792789
+ + 28792795 + 28793295 + 28793325 + 28793331 <= 1
 Limit_rule__('rachaad_white',_'RB',_'TB'),_('chase_edmonds',_'RB',_'TB'),_('sean_tucker',_'RB',_'TB'),_("ke'shawn_vaughn",_'RB',_'TB')__1:
  28792313 + 28792387 + 28792395 + 28792397 <= 1
 Limit_rule__('raheem_mostert',_'RB',_'MIA'),_('salvon_ahmed',_'RB',_'MIA'),_('alec_ingold',_'RB',_'MIA'),_("de'von_achane",_'RB',_'MIA')__1:
@@ -277,14 +277,14 @@ Limit_rule__('samaje_perine',_'RB',_'DEN'),_('javonte_williams',_'RB',_'DEN'),_(
 Limit_rule__('travis_etienne_jr.',_'RB',_'JAX'),_('tank_bigsby',_'RB',_'JAX'),_('jamycal_hasty',_'RB',_'JAX')__1:
  28792285 + 28792339 + 28792399 <= 1
 Limit_rule__('treylon_burks',_'WR',_'TEN'),_('chig_okonkwo',_'TE',_'TEN'),_('deandre_hopkins',_'WR',_'TEN'),_('nick_westbrook#ikhine',_'WR',_'TEN'),_('chris_moore',_'WR',_'TEN'),_('josh_whyle',_'TE',_'TEN'),_('trevon_wesco',_'TE',_'TEN')__unless__('derek_carr',_'QB',_'NO'),_('ryan_tannehill',_'QB',_'TEN')__1:
- 28792623 + 28792673 + 28792759 + 28793045 + 28793277 + 28793465 + 28793467
- <= 1
+ - 28792196 - 28792198 + 28792623 + 28792673 + 28792759 + 28793045 + 28793277
+ + 28793465 + 28793467 <= 1
 Limit_rule__('tutu_atwell',_'WR',_'LAR'),_('tyler_higbee',_'TE',_'LAR'),_('van_jefferson',_'WR',_'LAR'),_('puka_nacua',_'WR',_'LAR'),_('ben_skowronek',_'WR',_'LAR'),_('brycen_hopkins',_'TE',_'LAR'),_('demarcus_robinson',_'WR',_'LAR'),_('hunter_long',_'TE',_'LAR'),_('davis_allen',_'TE',_'LAR'),_('tyler_johnson',_'WR',_'LAR')__unless__('geno_smith',_'QB',_'SEA'),_('matthew_stafford',_'QB',_'LAR')__1:
- 28792687 + 28792755 + 28792803 + 28792805 + 28792807 + 28792813 + 28793257
- + 28793313 + 28793339 + 28793341 <= 1
+ - 28792186 - 28792190 + 28792687 + 28792755 + 28792803 + 28792805 + 28792807
+ + 28792813 + 28793257 + 28793313 + 28793339 + 28793341 <= 1
 Limit_rule__('tyreek_hill',_'WR',_'MIA'),_('jaylen_waddle',_'WR',_'MIA'),_('durham_smythe',_'TE',_'MIA'),_('braxton_berrios',_'WR',_'MIA'),_('tyler_kroft',_'TE',_'MIA'),_('cedrick_wilson_jr.',_'WR',_'MIA'),_('erik_ezukanma',_'WR',_'MIA')__unless__('justin_herbert',_'QB',_'LAC'),_('tua_tagovailoa',_'QB',_'MIA')__1:
- 28792607 + 28792619 + 28792871 + 28792873 + 28792877 + 28793315 + 28793371
- <= 1
+ - 28792182 - 28792183 + 28792607 + 28792619 + 28792871 + 28792873 + 28792877
+ + 28793315 + 28793371 <= 1
 Max_Salary: 8000 28792178 + 7800 28792179 + 7700 28792180 + 7100 28792181
  + 6900 28792182 + 6700 28792183 + 6500 28792184 + 6300 28792185
  + 6100 28792186 + 6000 28792187 + 5900 28792188 + 5700 28792190
