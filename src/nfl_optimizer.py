@@ -362,8 +362,8 @@ class NFL_Optimizer:
                                                            (self.player_dict[player]['StdDev'] * self.randomness_amount / 100))
                                           * lp_variables[player] for player in self.player_dict), 'Objective'
             else:
-                self.problem += plp.lpSum(self.player_dict[player]['Fpts'] * lp_variables[player]
-                                          for player in self.player_dict) <= (fpts - 0.001)
+                self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Fpts'] * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
+                                for (player, pos_str, team) in self.player_dict) <= (fpts - 0.001), f'Objective {i}'
 
     def output(self):
         print('Lineups done generating. Outputting.')
