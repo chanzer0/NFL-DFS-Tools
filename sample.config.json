@@ -2,14 +2,18 @@
     "projection_path": "projections.csv",
     "player_path": "player_ids.csv",
     "contest_structure_path": "contest_structure.csv",
-    "use_double_te": true,
+    "use_double_te": false,
     "global_team_limit": 4,
     "projection_minimum": 5,
     "randomness": 25,
-    "min_lineup_salary": 49200,
+    "min_lineup_salary": 49200, 
     "max_pct_off_optimal": 0.25,
     "num_players_vs_def" : 0,
-    "pct_field_using_stacks" : 0.65,
+    "pct_field_using_stacks" : 0.65, 
+    "pct_field_double_stacks": 0.4,
+    "default_qb_var" : 0.4, 
+    "default_skillpos_var" : 0.5, 
+    "default_def_var" : 0.5,
     "at_most": {
         "1": [["Ezekiel Elliott", "Tony Pollard"]]
     },
@@ -54,20 +58,9 @@
             }
         ]
     },
-    "team_limits": {
-        "DEN": 1,
-        "LA": 1,
-        "NO": 1,
-        "NYG": 1,
-        "HOU": 1,
-        "TEN": 1
-    },
-    "matchup_limits": {
-        "DEN@NYG": 2
-    },
-    "matchup_at_least": {
-        "BUF@NYJ": 2
-    },
+    "matchup_limits": {},
+    "matchup_at_least": {},
+    "team_limits": {},
     "custom_correlations" : {
         "Joe Burrow": {"RB": 0.69, "WR":-0.42}
     }

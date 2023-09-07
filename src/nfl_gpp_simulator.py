@@ -472,32 +472,7 @@ class NFL_GPP_Simulator:
                 # print(row)
                 if i == self.field_size:
                     break
-                if self.site == 'dk':
-                    lineup = [self.extract_id(str(row[j])) for j in range(9)]
-                    
-                    # lineup = [
-                    #     str(row[0].split("(")[1].replace(")","")),
-                    #     str(row[1].split("(")[1].replace(")","")),
-                    #     str(row[2].split("(")[1].replace(")","")),
-                    #     str(row[3].split("(")[1].replace(")","")),
-                    #     str(row[4].split("(")[1].replace(")","")),
-                    #     str(row[5].split("(")[1].replace(")","")),
-                    #     str(row[6].split("(")[1].replace(")","")),
-                    #     str(row[7].split("(")[1].replace(")","")),
-                    #     str(row[8].split("(")[1].replace(")",""))
-                    # ]
-                elif self.site == "fd":
-                    lineup = [
-                        str(row[0]),
-                        str(row[1]),
-                        str(row[2]),
-                        str(row[3]),
-                        str(row[4]),
-                        str(row[5]),
-                        str(row[6]),
-                        str(row[7]),
-                        str(row[8])
-                    ]                        
+                lineup = [self.extract_id(str(row[j])) for j in range(9)]                      
                 # storing if this lineup was made by an optimizer or with the generation process in this script
                 error = False
                 for l in lineup:

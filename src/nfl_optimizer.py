@@ -33,6 +33,9 @@ class NFL_Optimizer:
     use_double_te = True
     projection_minimum = 0
     randomness_amount = 0
+    default_qb_var = 0.4
+    default_skillpos_var = 0.5
+    default_def_var = 0.5
     team_rename_dict = {
         "LA": "LAR"
     }
@@ -106,6 +109,9 @@ class NFL_Optimizer:
         self.stack_rules = self.config["stack_rules"]
         self.matchup_at_least = self.config["matchup_at_least"]
         self.matchup_limits = self.config["matchup_limits"]
+        self.default_qb_var = self.config["default_qb_var"] if 'default_qb_var' in self.config else 0.333
+        self.default_skillpos_var = self.config["default_skillpos_var"] if 'default_skillpos_var' in self.config else 0.5
+        self.default_def_var = self.config["default_def_var"] if 'default_def_var' in self.config else 0.5
 
     # Load projections from file
     def load_projections(self, path):
@@ -136,6 +142,13 @@ class NFL_Optimizer:
                 if float(row['fpts']) < self.projection_minimum and row['position'] != 'DST':
                     continue
                 
+                if stddev == 0:
+                    if position == 'QB':
+                        stddev = float(row['fpts']) * self.default_qb_var
+                    elif position == 'DST':
+                        stddev = float(row['fpts']) * self.default_def_var
+                    else:
+                        stddev = float(row['fpts']) * self.default_skillpos_var
                 self.player_dict[(player_name, position, team)] = {
                     'Fpts': float(row['fpts']),
                     'Position': position,
@@ -417,7 +430,7 @@ class NFL_Optimizer:
                 if value['ID'] in player_ids:
                     players.append(key)
             fpts = sum([self.player_dict[player]['Fpts'] for player in players])
-            
+            print(fpts, players)
             self.lineups[fpts] = players
             
             
@@ -428,7 +441,8 @@ class NFL_Optimizer:
             if self.randomness_amount != 0:
                 self.problem += plp.lpSum(np.random.normal(self.player_dict[(player, pos_str, team)]['Fpts'],
                                                         (self.player_dict[(player, pos_str, team)]['StdDev'] * self.randomness_amount / 100))
-                                        * lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict), 'Objective'
+                                        * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
+                             for (player, pos_str, team) in self.player_dict), 'Objective'
             else:
                 self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Fpts'] * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                 for (player, pos_str, team) in self.player_dict) <= (fpts - 0.001), f'Objective {i}'
