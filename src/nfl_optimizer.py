@@ -153,7 +153,7 @@ class NFL_Optimizer:
                     'Fpts': float(row['fpts']),
                     'Position': position,
                     'ID': 0,
-                    'Salary': int(row['salary']),
+                    'Salary': int(row['salary'].replace(',','')),
                     'Name': row['name'],
                     'Matchup': '',
                     'Team': team,
