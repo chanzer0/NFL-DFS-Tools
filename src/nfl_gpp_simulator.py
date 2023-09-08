@@ -110,6 +110,7 @@ class NFL_GPP_Simulator:
             self.entry_fee = 0
         
         #self.adjust_default_stdev()
+        self.assertPlayerDict()
         self.num_iterations = int(num_iterations)
         self.get_optimal()
         if self.use_lineup_input:
@@ -134,11 +135,16 @@ class NFL_GPP_Simulator:
         self.overlap_limit = float(self.config['num_players_vs_def'])
         self.pct_field_double_stacks = float(self.config['pct_field_double_stacks'])
         self.correlation_rules = self.config["custom_correlations"]
+    
+    def assertPlayerDict(self):
+        for p, s in list(self.player_dict.items()):
+            if s["ID"] == 0 or s['ID'] == '' or s['ID'] is None:
+                print(s['Name'] + ' name mismatch between projections and player ids, excluding from player_dict')
+                self.player_dict.pop(p)
         
     # In order to make reasonable tournament lineups, we want to be close enough to the optimal that
     # a person could realistically land on this lineup. Skeleton here is taken from base `mlb_optimizer.py`
     def get_optimal(self):
-
             #print(s['Name'],s['ID'])
         #print(self.player_dict)
         problem = plp.LpProblem('NFL', plp.LpMaximize)
@@ -359,10 +365,14 @@ class NFL_GPP_Simulator:
             reader = csv.DictReader(self.lower_first(file))
             for row in reader:
                 player_name = row["name"].replace("-", "#").lower().strip()
-                fpts = float(row["fpts"])
+                try:
+                    fpts = float(row["fpts"])
+                except:
+                    fpts = 0
+                    print('unable to load player fpts: ' + player_name + ', fpts:' + row['fpts'])
                 if 'fieldfpts' in row:
                     if row['fieldfpts'] == '':
-                        fieldFpts = float(row['fpts'])
+                        fieldFpts = fpts
                     else:
                         fieldFpts = float(row['fieldfpts'])
                 else:
@@ -388,11 +398,11 @@ class NFL_GPP_Simulator:
                 #check if ceiling exists in row columns
                 if row['ceiling']:
                     if row['ceiling'] == '':
-                        ceil = float(row['fpts'])+stddev
+                        ceil = fpts+stddev
                     else:
                         ceil = float(row['ceiling'])
                 else:
-                    ceil = float(row['fpts'])+stddev
+                    ceil = fpts+stddev
                 if row['salary']:
                     sal = int(row['salary'].replace(",", ""))
                 if pos == 'QB':
@@ -1129,13 +1139,17 @@ class NFL_GPP_Simulator:
             own_p = []
             lu_names = []
             lu_teams = []
+            qb_stack = 0
+            qb_tm = ''
             players_vs_def = 0
             def_opps = []
             for id in x["Lineup"]:
                 for k,v in self.player_dict.items():
                     if v["ID"] == id:  
                         if 'DST' in v["Position"]:
-                            def_opps.append(v['Opp'])         
+                            def_opps.append(v['Opp'])  
+                        if 'QB' in v['Position']:
+                            qb_tm = v['Team']       
             for id in x["Lineup"]:
                 for k,v in self.player_dict.items():
                     if v["ID"] == id:
@@ -1151,7 +1165,17 @@ class NFL_GPP_Simulator:
                                 players_vs_def += 1
                         continue
             counter = collections.Counter(lu_teams)
-            stacks = counter.most_common(2)
+            stacks = counter.most_common()
+
+            # Find the QB team in stacks and set it as primary stack, remove it from stacks
+            for s in stacks:
+                if s[0] == qb_tm:
+                    primaryStack = str(qb_tm) + ' ' + str(s[1])
+                    stacks.remove(s)
+                    break
+
+            # After removing QB team, the first team in stacks will be the team with most players not in QB stack
+            secondaryStack = str(stacks[0][0]) + ' ' + str(stacks[0][1])
             own_p = np.prod(own_p)
             win_p = round(x["Wins"] / self.num_iterations * 100, 2)
             top10_p = round(x["Top10"] / self.num_iterations * 100, 2)
