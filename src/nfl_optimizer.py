@@ -56,7 +56,7 @@ class NFL_Optimizer:
         player_path = os.path.join(os.path.dirname(
             __file__), '../{}_data/{}'.format(site, self.config['player_path']))
         self.load_player_ids(player_path)
-        
+        self.assertPlayerDict()
 
     def flatten(self, list):
         return [item for sublist in list for item in sublist]
@@ -112,6 +112,12 @@ class NFL_Optimizer:
         self.default_qb_var = self.config["default_qb_var"] if 'default_qb_var' in self.config else 0.333
         self.default_skillpos_var = self.config["default_skillpos_var"] if 'default_skillpos_var' in self.config else 0.5
         self.default_def_var = self.config["default_def_var"] if 'default_def_var' in self.config else 0.5
+    
+    def assertPlayerDict(self):
+        for p, s in list(self.player_dict.items()):
+            if s["ID"] == 0 or s['ID'] == '' or s['ID'] is None:
+                print(s['Name'] + ' name mismatch between projections and player ids, excluding from player_dict')
+                self.player_dict.pop(p)
 
     # Load projections from file
     def load_projections(self, path):
@@ -120,8 +126,13 @@ class NFL_Optimizer:
             reader = csv.DictReader(self.lower_first(file))
             for row in reader:
                 player_name = row['name'].replace('-', '#').lower().strip()
+                try:
+                    fpts = float(row["fpts"])
+                except:
+                    fpts = 0
+                    print('unable to load player fpts: ' + player_name + ', fpts:' + row['fpts'])
                 position = row['position']
-                if position == 'D':
+                if position == 'D' or position == 'DEF':
                     position = 'DST'
                     
                 team = row['team']
@@ -130,35 +141,45 @@ class NFL_Optimizer:
                     
                 if team == 'JAX' and self.site == 'fd':
                     team = 'JAC'
-                
-                stddev = row['stddev'] if 'stddev' in row else 0
-                if stddev == '':
-                    stddev = 0
+                if 'stddev' in row:
+                    if row['stddev'] == '' or float(row['stddev']) == 0:
+                        if position == 'QB':
+                            stddev = fpts* self.default_qb_var
+                        elif position == 'DST':
+                            stddev = fpts* self.default_def_var
+                        else:
+                            stddev = fpts*self.default_skillpos_var
+                    else:
+                        stddev = float(row["stddev"])
                 else:
-                    stddev = float(stddev)
-                ceiling = row['ceiling'] if 'ceiling' in row else row['fpts'] + stddev
-                if ceiling == '':
-                    ceiling = float(row['fpts']) + stddev
+                    if position == 'QB':
+                        stddev = fpts* self.default_qb_var
+                    elif position == 'DST':
+                        stddev = fpts* self.default_def_var
+                    else:
+                        stddev = fpts*self.default_skillpos_var
+                if 'ceiling' in row:
+                    if row['ceiling'] == '' or float(row['ceiling'])==0:
+                        ceil = fpts+stddev
+                    else:
+                        ceil = float(row['ceiling'])
+                else:
+                    ceil = fpts+stddev
+                own = float(row['own%'].replace('%','')) 
+                if own == 0:
+                    own = 0.1
                 if float(row['fpts']) < self.projection_minimum and row['position'] != 'DST':
                     continue
-                
-                if stddev == 0:
-                    if position == 'QB':
-                        stddev = float(row['fpts']) * self.default_qb_var
-                    elif position == 'DST':
-                        stddev = float(row['fpts']) * self.default_def_var
-                    else:
-                        stddev = float(row['fpts']) * self.default_skillpos_var
                 self.player_dict[(player_name, position, team)] = {
-                    'Fpts': float(row['fpts']),
+                    'Fpts': fpts,
                     'Position': position,
                     'ID': 0,
                     'Salary': int(row['salary']),
                     'Name': row['name'],
                     'Matchup': '',
                     'Team': team,
-                    'Ownership': float(row['own%']) if float(row['own%']) != 0 else 0.1,
-                    'Ceiling': float(ceiling),
+                    'Ownership': own,
+                    'Ceiling': ceil,
                     'StdDev': stddev,
                 }
                 
