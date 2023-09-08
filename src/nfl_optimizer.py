@@ -433,10 +433,10 @@ class NFL_Optimizer:
             for key, value in self.player_dict.items():
                 if value['ID'] in player_ids:
                     players.append(key)
-            
-            self.lineups.append(players)
-            
-            
+                    
+            fpts_used = self.problem.objective.value()
+            self.lineups.append((players, fpts_used))
+        
             if i % 100 == 0:
                 print(i)
                 
@@ -454,9 +454,9 @@ class NFL_Optimizer:
         print('Lineups done generating. Outputting.')
         
         sorted_lineups = []
-        for lineup in self.lineups:
+        for lineup, fpts_used in self.lineups:
             sorted_lineup = self.sort_lineup(lineup)
-            sorted_lineups.append(sorted_lineup)
+            sorted_lineups.append((sorted_lineup, fpts_used))
             
             
         team_stack_counts = {}
@@ -466,8 +466,8 @@ class NFL_Optimizer:
         out_path = os.path.join(os.path.dirname(__file__), filename_out)
         with open(out_path, 'w') as f:
             f.write(
-                    'QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Salary,Fpts Proj,Ceiling,Own. Sum,Own. Product,STDDEV,Stack\n')
-            for x in sorted_lineups:
+                    'QB,RB,RB,WR,WR,WR,TE,FLEX,DST,Salary,Fpts Proj,Fpts Used,Ceiling,Own. Sum,Own. Product,STDDEV,Stack\n')
+            for x, fpts_used in sorted_lineups:
                 # Identify the QB team
                 qb_team = self.player_dict[x[0]]['Team']
 
@@ -501,7 +501,7 @@ class NFL_Optimizer:
                     self.player_dict[x[7]]['Name'], self.player_dict[x[7]]['ID'],
                     self.player_dict[x[8]]['Name'], self.player_dict[x[8]]['ID'],
                     salary, round(
-                        fpts_p, 2), ceil, own_s, own_p, stddev, 'QB+{}'.format(team_count)
+                        fpts_p, 2), round(fpts_used, 2), ceil, own_s, own_p, stddev, 'QB+{}'.format(team_count)
                 )
                 f.write('%s\n' % lineup_str)
             
