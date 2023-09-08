@@ -151,6 +151,8 @@ class NFL_Showdown_Optimizer:
                 
                 ownership = float(row['own%']) if 'own%' in row and row['own%'] != '' else 0.1
                 cptn_ownership = float(row['cptown%']) if 'cptown%' in row and row['cptown%'] != '' else 0.1
+                if cptn_ownership == 0.1:
+                    cptn_ownership = 0.5 * ownership
                         
                 # Assign FLEX then CPTN position for showdown
                 self.player_dict[(player_name, 'FLEX', team)] = {

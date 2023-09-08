@@ -61,11 +61,11 @@ Where:
 
         ![Example usage](readme_images/tournament_lineups.png)
 
--   `sd` for running showdown crunches, with or without randomness
+-   `opto_sd` for running showdown crunches, with or without randomness
 
 `<num_lineups>` is the number of lineups you want to generate when using the `opto` process.
 
-`<num_uniques>` defines the number of players that must differ from one lineup to the next. **NOTE** - this is enforced _after_ crunching, so 1000 lineups may be whittled down to 7-800 depending on this constraint. Enforcing this _after_ crunching aids in the speed of crunching. Expect approximately 5-15% of lineups to be "culled" by this constraint and plan accordingly. The more players available to crunch, the lower this percentage will be.
+`<num_uniques>` defines the number of players that must differ from one lineup to the next. These unique constraints are applied at the time of optimization, so if you ask for 10 lineups with 5 unique players, you will get 10 lineups with 5 unique players. In the past, this was enforced post-optimization, meaning it would prune lineups from the pool if they violated the unique constraints, resulting in fewer lineups than requested.
 
 For example, to generate 1000 lineups for DraftKings, with 3 uniques and randomness, I would execute the following:
 `python .\main.py dk opto 1000 3` with `"randomness": X` in `config.json` where `X` is a number between 0 and 100
@@ -82,7 +82,7 @@ The structure for the config is as follows:
 
 ```
 {
-    "projection_path": "projections.csv", // This is where projections are loaded from -- the required columns are "Name", "Position", "Team", "Salary", "Fpts", "Own%", and "StdDev". "Ceiling" is an optional column, if not provided then it is calculated as Fpts + StdDev. "Field Fpts" is also an optional column, if provided the field generation algorithm will consider this projection when building lineups instead of "Fpts". The basic theory behind this is the field may not use the same projections as the user, so providing an 'industry' projection could make more sense to reduce bias in lineup building. 
+    "projection_path": "projections.csv", // This is where projections are loaded from -- the required columns are "Name", "Position", "Team", "Salary", "Fpts", "Own%", and "StdDev". "Ceiling" is an optional column, if not provided then it is calculated as Fpts + StdDev. "Field Fpts" is also an optional column, if provided the field generation algorithm will consider this projection when building lineups instead of "Fpts". The basic theory behind this is the field may not use the same projections as the user, so providing an 'industry' projection could make more sense to reduce bias in lineup building. If you are optimizing for Showdown, you also need a "CptOwn%" column. If it is not provided, it is calculated as half of the normal ownership.
     "player_path": "player_ids.csv", // This is where player ids are loaded from -- this is the direct player ID export from DraftKings/Fanduel found on the contest or edit lineups page.
     "contest_structure_path": "contest_structure.csv", // This is where GPP sim tournament strucure is loaded from -- as seen above, the required columns are "Place", "Payout", "Field Size", "Entry Fee"
     "use_double_te": true, // should the field lineup generator use double te lineups
