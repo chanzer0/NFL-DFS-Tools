@@ -428,7 +428,6 @@ class NFL_Optimizer:
                     len(self.num_lineups), self.num_lineups))
 
             # Get the lineup and add it to our list
-            self.problem.writeLP('file.lp')
             player_ids = [player for player in lp_variables if lp_variables[player].varValue != 0]
             players = []
             for key, value in self.player_dict.items():
