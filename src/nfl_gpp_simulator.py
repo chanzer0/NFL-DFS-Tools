@@ -1225,8 +1225,8 @@ class NFL_GPP_Simulator:
                         roi_p,
                         own_p,
                         roi_round,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
@@ -1257,8 +1257,8 @@ class NFL_GPP_Simulator:
                         win_p,
                         top10_p,
                         own_p,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
@@ -1296,8 +1296,8 @@ class NFL_GPP_Simulator:
                         roi_p,
                         own_p,
                         roi_round,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
@@ -1328,8 +1328,8 @@ class NFL_GPP_Simulator:
                         win_p,
                         top10_p,
                         own_p,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
