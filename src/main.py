@@ -19,7 +19,7 @@ def main(arguments):
         opto.optimize()
         opto.output()
 
-    elif process == 'sd':
+    elif process == 'sd_opto':
         num_lineups = arguments[3]
         num_uniques = arguments[4]
         opto = NFL_Showdown_Optimizer(site, num_lineups, num_uniques)
