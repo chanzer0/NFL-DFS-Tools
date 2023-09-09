@@ -470,7 +470,7 @@ class NFL_Optimizer:
             for x, fpts_used in sorted_lineups:
                 # Identify the QB team
                 qb_team = self.player_dict[x[0]]['Team']
-
+                print(qb_team)
                 # Count how many players are from the QB's team in the lineup
                 team_count = 0
                 if qb_team:
@@ -482,7 +482,7 @@ class NFL_Optimizer:
                     team_stack_counts[stack_key] = Counter()
                 team_stack_counts[stack_key][qb_team] += 1
                 
-                
+                print(team_stack_counts)
                 salary = sum(self.player_dict[player]['Salary'] for player in x)
                 fpts_p = sum(self.player_dict[player]['Fpts'] for player in x)
                 own_s = sum(self.player_dict[player]['Fpts'] for player in x)
@@ -490,7 +490,7 @@ class NFL_Optimizer:
                     [self.player_dict[player]['Ownership']/100 for player in x])
                 ceil = sum([self.player_dict[player]['Ceiling'] for player in x])
                 stddev = sum([self.player_dict[player]['StdDev'] for player in x])
-                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{}'.format(
+                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{},{}'.format(
                     self.player_dict[x[0]]['Name'], self.player_dict[x[0]]['ID'],
                     self.player_dict[x[1]]['Name'], self.player_dict[x[1]]['ID'],
                     self.player_dict[x[2]]['Name'], self.player_dict[x[2]]['ID'],
