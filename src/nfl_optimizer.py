@@ -484,7 +484,7 @@ class NFL_Optimizer:
                 
                 salary = sum(self.player_dict[player]['Salary'] for player in x)
                 fpts_p = sum(self.player_dict[player]['Fpts'] for player in x)
-                own_s = sum(self.player_dict[player]['Fpts'] for player in x)
+                own_s = sum(self.player_dict[player]['Ownership'] for player in x)
                 own_p = np.prod(
                     [self.player_dict[player]['Ownership']/100 for player in x])
                 ceil = sum([self.player_dict[player]['Ceiling'] for player in x])
