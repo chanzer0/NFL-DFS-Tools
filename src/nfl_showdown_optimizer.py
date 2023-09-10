@@ -471,8 +471,16 @@ class NFL_Showdown_Optimizer:
         out_path = os.path.join(os.path.dirname(__file__), filename_out)
         with open(out_path, 'w') as f:
             f.write(
-                    'CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Ceiling,Own. Product,Own. Sum,STDDEV\n')
+                    'CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Ceiling,Own. Product,Own. Sum,STDDEV,Stack Type\n')
             for x in self.lineups:
+                team_count = {}
+                for t in self.team_list:
+                    team_count[t] = [1 if t in self.player_dict[player]['Team'] else 0 for player in x].count(1)
+                
+                team_stack_string = ''
+                for team, count in team_count.items():
+                    team_stack_string += f'{count}|'
+                    
                 salary = sum(
                     self.player_dict[player]['Salary'] for player in x)
                 fpts_p = sum(self.player_dict[player]['Fpts'] for player in x)
@@ -480,7 +488,7 @@ class NFL_Showdown_Optimizer:
                 own_p = np.prod([self.player_dict[player]['Ownership']/100 for player in x])
                 ceil = sum([self.player_dict[player]['Ceiling'] for player in x])
                 stddev = sum([self.player_dict[player]['StdDev'] for player in x])
-                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{}'.format(
+                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{}'.format(
                     self.player_dict[x[0]]['Name'], self.player_dict[x[0]]['ID'],
                     self.player_dict[x[1]]['Name'], self.player_dict[x[1]]['ID'],
                     self.player_dict[x[2]]['Name'], self.player_dict[x[2]]['ID'],
@@ -488,7 +496,7 @@ class NFL_Showdown_Optimizer:
                     self.player_dict[x[4]]['Name'], self.player_dict[x[4]]['ID'],
                     self.player_dict[x[5]]['Name'], self.player_dict[x[5]]['ID'],
                     salary, round(
-                        fpts_p, 2), ceil, own_p, own_s, stddev
+                        fpts_p, 2), ceil, own_p, own_s, stddev, team_stack_string[:-1]
                 )
                 f.write('%s\n' % lineup_str)
             
