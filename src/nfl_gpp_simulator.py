@@ -386,18 +386,26 @@ class NFL_GPP_Simulator:
                 if 'QB' not in position and 'DST' not in position:
                     position.append('FLEX')
                 pos = position[0]
-                if row['stddev'] == '':
-                    if pos == 'QB':
+                if 'stddev' in row:
+                    if row['stddev'] == '' or float(row['stddev']) == 0:
+                        if position == 'QB':
+                            stddev = fpts* self.default_qb_var
+                        elif position == 'DST':
+                            stddev = fpts* self.default_def_var
+                        else:
+                            stddev = fpts*self.default_skillpos_var
+                    else:
+                        stddev = float(row["stddev"])
+                else:
+                    if position == 'QB':
                         stddev = fpts* self.default_qb_var
-                    elif pos == 'DST':
+                    elif position == 'DST':
                         stddev = fpts* self.default_def_var
                     else:
                         stddev = fpts*self.default_skillpos_var
-                else:
-                    stddev = float(row["stddev"])
                 #check if ceiling exists in row columns
-                if row['ceiling']:
-                    if row['ceiling'] == '':
+                if 'ceiling' in row:
+                    if row['ceiling'] == '' or float(row['ceiling'])==0:
                         ceil = fpts+stddev
                     else:
                         ceil = float(row['ceiling'])
@@ -421,6 +429,9 @@ class NFL_GPP_Simulator:
                 if self.site == 'fd':
                     if team == 'JAX':
                         team = 'JAC'
+                own = float(row['own%'].replace('%','')) 
+                if own == 0:
+                    own = 0.1
                 pos_str = str(position)
                 player_data = {
                     "Fpts": fpts,
@@ -433,7 +444,7 @@ class NFL_GPP_Simulator:
                     "Salary": int(row["salary"].replace(",", "")),
                     "StdDev": stddev,
                     "Ceiling": ceil,
-                    "Ownership": float(row["own%"]),
+                    "Ownership": own,
                     "Correlations" : corr,
                     "In Lineup": False
                 }
@@ -1214,8 +1225,8 @@ class NFL_GPP_Simulator:
                         roi_p,
                         own_p,
                         roi_round,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
@@ -1246,8 +1257,8 @@ class NFL_GPP_Simulator:
                         win_p,
                         top10_p,
                         own_p,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
@@ -1285,8 +1296,8 @@ class NFL_GPP_Simulator:
                         roi_p,
                         own_p,
                         roi_round,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
@@ -1317,8 +1328,8 @@ class NFL_GPP_Simulator:
                         win_p,
                         top10_p,
                         own_p,
-                        str(stacks[0][0]) + ' ' + str(stacks[0][1]),
-                        str(stacks[1][0]) + ' ' + str(stacks[1][1]),
+                        primaryStack,
+                        secondaryStack,
                         players_vs_def,
                         lu_type
                     )
