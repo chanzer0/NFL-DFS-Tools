@@ -418,8 +418,6 @@ class NFL_Optimizer:
 
 
         # Crunch!
-        # for k in self.player_dict:
-        #     print(k, self.player_dict[k]['Position'])
         for i in range(self.num_lineups):
             try:
                 self.problem.solve(plp.PULP_CBC_CMD(msg=0))

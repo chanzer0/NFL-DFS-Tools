@@ -442,7 +442,6 @@ class NFL_Showdown_Optimizer:
                     players.append(key)
                     
             fpts = sum([self.player_dict[player]['Fpts'] for player in players])
-            print(fpts, players)
             
             self.lineups.append(players)
             
