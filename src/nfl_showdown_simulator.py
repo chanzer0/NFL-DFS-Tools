@@ -422,9 +422,12 @@ class NFL_Showdown_Simulator:
                 own = float(row['own%'].replace('%','')) 
                 if own == 0:
                     own = 0.1
-                cptOwn = float(row['cptown%'].replace('%','')) 
-                if cptOwn == 0:
-                    cptOwn = 0.1
+                if 'cptown%' in row:
+                    cptOwn = float(row['cptown%'].replace('%','')) 
+                    if cptOwn == 0:
+                        cptOwn = 0.1
+                else:
+                    cptOwn = own/2
                 sal = int(row["salary"].replace(",", ""))
                 pos_str = 'FLEX'
                 player_data = {
@@ -545,14 +548,14 @@ class NFL_Showdown_Simulator:
                     print("lineup {} is missing players".format(i))
                     continue
                 if not error:
-                    self.field_lineups[j] = {
+                    self.field_lineups[j] = { "Lineup": {
                         "Lineup": lineup,
                         "Wins": 0,
                         "Top10": 0,
                         "ROI": 0,
                         "Cashes": 0,
                         "Type": "input",
-                    }
+                    }, "count":1}
                     j += 1
         print("loaded {} lineups".format(j))
         #print(self.field_lineups)
@@ -618,7 +621,6 @@ class NFL_Showdown_Simulator:
                     "Type": "generated_nostack",
                 }
                 break
-        
         return lus
 
     
