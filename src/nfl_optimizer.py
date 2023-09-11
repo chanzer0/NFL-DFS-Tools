@@ -268,7 +268,7 @@ class NFL_Optimizer:
                     if value['Matchup'] == matchup:
                         players_in_game.append(key)
                 self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
-                    
+                           
         # Address stack rules
         for rule_type in self.stack_rules:
             for rule in self.stack_rules[rule_type]:

@@ -242,6 +242,7 @@ class NFL_Showdown_Optimizer:
                 self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                           for (player, pos_str, team) in tuple_name_list) <= int(limit), f'At most {limit} players {tuple_name_list}'
 
+
         # Address team limits
         for team, limit in self.team_limits.items():
             self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
@@ -434,14 +435,14 @@ class NFL_Showdown_Optimizer:
                     len(self.num_lineups), self.num_lineups))
 
             # Get the lineup and add it to our list
-            self.problem.writeLP('file.lp')
+            # self.problem.writeLP('file.lp')
             player_ids = [player for player in lp_variables if lp_variables[player].varValue != 0]
             players = []
             for key, value in self.player_dict.items():
                 if value['ID'] in player_ids:
                     players.append(key)
                     
-            fpts = sum([self.player_dict[player]['Fpts'] for player in players])
+            # fpts = sum([self.player_dict[player]['Fpts'] for player in players])
             
             self.lineups.append(players)
             
