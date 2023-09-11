@@ -19,40 +19,6 @@ import seaborn as sns
 from numba import njit
 import sys
 
-@njit
-def calculate_payouts(num_iterations, ranks, fpts_array, payout_array, entry_fee, field_size):
-    results = []
-
-    for simulation_index in range(num_iterations):
-        ranks_in_sim = ranks[:, simulation_index]
-        scores_in_sim = fpts_array[:, simulation_index]
-
-        unique, counts = np.unique(scores_in_sim, return_counts=True)
-        score_to_count = np.zeros(np.max(unique.astype(np.int32)) + 1)
-        for i, score in enumerate(unique):
-            score_to_count[int(score)] = counts[i]
-
-        payouts_in_sim = np.full(field_size, -entry_fee)
-        payout_dict_array = np.full(len(payout_array), -entry_fee)
-        for idx in range(len(payout_array)):
-            payout_dict_array[idx] = payout_array[idx]
-
-        for idx, score in enumerate(unique):
-            tie_count = score_to_count[int(score)]
-            indices = np.where(scores_in_sim == score)[0]
-
-            if tie_count == 1:
-                payouts_in_sim[indices] = payout_dict_array[indices]
-            else:
-                total_payout = sum(payout_dict_array[i] for i in indices)
-                average_payout = total_payout / tie_count
-                payouts_in_sim[indices] = average_payout
-
-        results.append((payouts_in_sim, ranks_in_sim))
-    
-    return results
-
-
 class NFL_Showdown_Simulator:
     config = None
     player_dict = {}
