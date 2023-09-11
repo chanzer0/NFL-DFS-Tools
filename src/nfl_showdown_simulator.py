@@ -519,7 +519,7 @@ class NFL_Showdown_Simulator:
                 # print(row)
                 if i == self.field_size:
                     break
-                lineup = [self.extract_id(str(row[j])) for j in range(9)]                      
+                lineup = [self.extract_id(str(row[j])) for j in range(len(self.roster_construction))]                      
                 # storing if this lineup was made by an optimizer or with the generation process in this script
                 error = False
                 for l in lineup:
@@ -529,7 +529,7 @@ class NFL_Showdown_Simulator:
                         if l in self.id_name_dict:
                             print(self.id_name_dict[l])
                         error = True
-                if len(lineup) < 9:
+                if len(lineup) < len(self.roster_construction):
                     print("lineup {} is missing players".format(i))
                     continue
                 # storing if this lineup was made by an optimizer or with the generation process in this script
@@ -541,35 +541,12 @@ class NFL_Showdown_Simulator:
                         if l in self.id_name_dict:
                             print(self.id_name_dict[l])
                         error = True
-                if len(lineup) < 9:
+                if len(lineup) < len(self.roster_construction):
                     print("lineup {} is missing players".format(i))
                     continue
                 if not error:
-                    #reshuffle lineup to match temp_roster_construction
-                    temp_roster_construction = ['DST', 'QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX']
-                    shuffled_lu = []
-
-                    id_to_player_dict = {v["ID"]: v for k, v in self.player_dict.items()}
-                    lineup_copy = lineup.copy()
-                    position_counts = {'DST': 0, 'QB': 0, 'RB': 0, 'WR': 0, 'TE': 0, 'FLEX': 0}
-                    z = 0
-
-                    while z < 9:
-                        for t in temp_roster_construction:
-                            if position_counts[t] < temp_roster_construction.count(t):
-                                for l in lineup_copy:
-                                    player_info = id_to_player_dict.get(l)
-                                    if player_info and t in player_info['Position']:
-                                        shuffled_lu.append(l)
-                                        lineup_copy.remove(l)
-                                        position_counts[t] += 1
-                                        z += 1
-                                        if z == 9:
-                                            break
-                            if z == 9:
-                                break
                     self.field_lineups[j] = {
-                        "Lineup": shuffled_lu,
+                        "Lineup": lineup,
                         "Wins": 0,
                         "Top10": 0,
                         "ROI": 0,
