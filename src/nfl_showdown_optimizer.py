@@ -242,6 +242,7 @@ class NFL_Showdown_Optimizer:
                 self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
                                           for (player, pos_str, team) in tuple_name_list) <= int(limit), f'At most {limit} players {tuple_name_list}'
 
+
         # Address team limits
         for team, limit in self.team_limits.items():
             self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
@@ -434,15 +435,14 @@ class NFL_Showdown_Optimizer:
                     len(self.num_lineups), self.num_lineups))
 
             # Get the lineup and add it to our list
-            self.problem.writeLP('file.lp')
+            # self.problem.writeLP('file.lp')
             player_ids = [player for player in lp_variables if lp_variables[player].varValue != 0]
             players = []
             for key, value in self.player_dict.items():
                 if value['ID'] in player_ids:
                     players.append(key)
                     
-            fpts = sum([self.player_dict[player]['Fpts'] for player in players])
-            print(fpts, players)
+            # fpts = sum([self.player_dict[player]['Fpts'] for player in players])
             
             self.lineups.append(players)
             
@@ -472,8 +472,16 @@ class NFL_Showdown_Optimizer:
         out_path = os.path.join(os.path.dirname(__file__), filename_out)
         with open(out_path, 'w') as f:
             f.write(
-                    'CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Ceiling,Own. Product,Own. Sum,STDDEV\n')
+                    'CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Ceiling,Own. Product,Own. Sum,STDDEV,Stack Type\n')
             for x in self.lineups:
+                team_count = {}
+                for t in self.team_list:
+                    team_count[t] = [1 if t in self.player_dict[player]['Team'] else 0 for player in x].count(1)
+                
+                team_stack_string = ''
+                for team, count in team_count.items():
+                    team_stack_string += f'{count}|'
+                    
                 salary = sum(
                     self.player_dict[player]['Salary'] for player in x)
                 fpts_p = sum(self.player_dict[player]['Fpts'] for player in x)
@@ -481,7 +489,7 @@ class NFL_Showdown_Optimizer:
                 own_p = np.prod([self.player_dict[player]['Ownership']/100 for player in x])
                 ceil = sum([self.player_dict[player]['Ceiling'] for player in x])
                 stddev = sum([self.player_dict[player]['StdDev'] for player in x])
-                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{}'.format(
+                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{}'.format(
                     self.player_dict[x[0]]['Name'], self.player_dict[x[0]]['ID'],
                     self.player_dict[x[1]]['Name'], self.player_dict[x[1]]['ID'],
                     self.player_dict[x[2]]['Name'], self.player_dict[x[2]]['ID'],
@@ -489,7 +497,7 @@ class NFL_Showdown_Optimizer:
                     self.player_dict[x[4]]['Name'], self.player_dict[x[4]]['ID'],
                     self.player_dict[x[5]]['Name'], self.player_dict[x[5]]['ID'],
                     salary, round(
-                        fpts_p, 2), ceil, own_p, own_s, stddev
+                        fpts_p, 2), ceil, own_p, own_s, stddev, team_stack_string[:-1]
                 )
                 f.write('%s\n' % lineup_str)
             
