@@ -427,7 +427,7 @@ class NFL_Showdown_Simulator:
                     if cptOwn == 0:
                         cptOwn = 0.1
                 else:
-                    cptOwn = own/2
+                    cptOwn = own*.5
                 sal = int(row["salary"].replace(",", ""))
                 pos_str = 'FLEX'
                 player_data = {
@@ -588,10 +588,19 @@ class NFL_Showdown_Simulator:
             lineup, player_teams, lineup_matchups = [], [], []
             def_opp, players_opposing_def, cpt_selected = None, 0, False
             in_lineup.fill(0)
+            cpt_name = None
 
             for k, pos in enumerate(pos_matrix.T):
                 position_constraint = k >= 1 and players_opposing_def < overlap_limit
                 choice_idx, choice = NFL_Showdown_Simulator.select_player(pos, in_lineup, ownership, ids, def_opp if position_constraint else None, teams if position_constraint else None)
+                
+                if k == 0:
+                    cpt_player_info = new_player_dict[choice]
+                    flex_choice_idx = next((i for i, v in enumerate(new_player_dict.values()) if v["Name"] == cpt_player_info["Name"] and v["Team"] == cpt_player_info["Team"] and v["Position"] == cpt_player_info["Position"] and v["rosterPosition"] == "FLEX"), None)
+                    if flex_choice_idx is not None:
+                        in_lineup[flex_choice_idx] = 1
+                    def_opp = opponents[choice_idx][0]
+                    cpt_selected = True
                 
                 if cpt_selected and "QB" in new_player_dict[choice]["Position"] and "DEF" in [new_player_dict[x]["Position"] for x in lineup]:
                     continue
@@ -601,9 +610,7 @@ class NFL_Showdown_Simulator:
                 salary += salaries[choice_idx]
                 proj += projections[choice_idx]
 
-                if k == 0:
-                    def_opp = opponents[choice_idx][0]
-                    cpt_selected = True
+
 
                 #lineup_matchups.append(matchups[choice_idx[0]])
                 player_teams.append(teams[choice_idx][0])
