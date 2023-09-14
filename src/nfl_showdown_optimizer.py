@@ -311,13 +311,19 @@ class NFL_Showdown_Optimizer:
                         pos_key_player_tuple = None
                         stack_players_tuples = []
                         for key, value in self.player_dict.items():
-                            if value['Name'] == pos_key_player['Name'] and value['Position'] == pos_key_player['Position'] and value['Team'] == pos_key_player['Team']:
+                            if value['Name'] == pos_key_player['Name'] and value['RosterPosition'] == pos_key_player['RosterPosition'] and value['Team'] == pos_key_player['Team']:
                                 pos_key_player_tuple = key
-                            elif (value['Name'], value['Position'], value['Team']) in [(player['Name'], player['Position'], player['Team']) for player in stack_players]:
+                            elif (value['Name'], value['RosterPosition'], value['Team']) in [(player['Name'], player['RosterPosition'], player['Team']) for player in stack_players]:
                                 stack_players_tuples.append(key)
-
+                        
+                        # CPT pos key player cannot be stacked with other CPTs
+                        for (name, position, team) in stack_players_tuples:
+                            # if cpt position, remove them from the list 
+                            if position == 'CPT':
+                                stack_players_tuples.remove((name, position, team))
+                            
                         # [sum of stackable players] + -n*[stack_player] >= 0
-                        self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in stack_players_tuples] 
+                        self.problem += plp.lpSum([lp_variables[self.player_dict[player_tuple]['ID']] for player_tuple in stack_players_tuples] 
                                                   + [-count*lp_variables[self.player_dict[pos_key_player_tuple]['ID']]]) >= 0, f'Stack rule {pos_key_player_tuple} {stack_players_tuples} {count}'
                         
                 elif rule_type == 'limit':
@@ -357,10 +363,10 @@ class NFL_Showdown_Optimizer:
                             # [sum of limit players] + <= n
                             limit_players_tuples = []
                             for key, value in self.player_dict.items():
-                                if (value['Name'], value['Position'], value['Team']) in [(player['Name'], player['Position'], player['Team']) for player in limit_players]:
+                                if (value['Name'], value['RosterPosition'], value['Team']) in [(player['Name'], player['RosterPosition'], player['Team']) for player in limit_players]:
                                     limit_players_tuples.append(key)
-                            
-                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples]) <= int(count), f'Limit rule {limit_players_tuples} {count}'
+                                
+                            self.problem += plp.lpSum([lp_variables[self.player_dict[player_tuple]['ID']] for player_tuple in limit_players_tuples]) <= int(count), f'Limit rule {limit_players_tuples} {count}'
                         else:
                             unless_players = []
                             if unless_type == 'same-team':
@@ -389,15 +395,14 @@ class NFL_Showdown_Optimizer:
                             limit_players_tuples = []
                             unless_players_tuples = []
                             for key, value in self.player_dict.items():
-                                if (value['Name'], value['Position'], value['Team']) in [(player['Name'], player['Position'], player['Team']) for player in limit_players]:
+                                if (value['Name'], value['RosterPosition'], value['Team']) in [(player['Name'], player['RosterPosition'], player['Team']) for player in limit_players]:
                                     limit_players_tuples.append(key)
-                                elif (value['Name'], value['Position'], value['Team']) in [(player['Name'], player['Position'], player['Team']) for player in unless_players]:
+                                elif (value['Name'], value['RosterPosition'], value['Team']) in [(player['Name'], player['RosterPosition'], player['Team']) for player in unless_players]:
                                     unless_players_tuples.append(key)
                                     
                             # [sum of limit players] + -count(unless_players)*[unless_players] <= n
-                                
-                            self.problem += plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in limit_players_tuples] 
-                                        - int(count) * plp.lpSum([lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in unless_players_tuples])) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
+                            self.problem += plp.lpSum([lp_variables[self.player_dict[player_tuple]['ID']] for player_tuple in limit_players_tuples] 
+                                        - int(count) * plp.lpSum([lp_variables[self.player_dict[player_tuple]['ID']] for player_tuple in unless_players_tuples])) <= int(count), f'Limit rule {limit_players_tuples} unless {unless_players_tuples} {count}'
                         
         # Need exactly 1 CPT
         captain_tuples = [(player, pos_str, team) for (player, pos_str, team) in self.player_dict if pos_str == 'CPT']
@@ -409,8 +414,10 @@ class NFL_Showdown_Optimizer:
         
         # Max 5 players from one team
         for teamIdent in self.team_list:
-            players_on_team = [(player, pos_str, team) for (player, pos_str, team) in self.player_dict if teamIdent == team]
+            players_on_team = [(player, position, team) for (player, position, team) in self.player_dict if teamIdent == team]
             self.problem += plp.lpSum(lp_variables[self.player_dict[player_tuple]['ID']] for player_tuple in players_on_team) <= 5, f'Max 5 players from one team {teamIdent}'
+            
+
         
         # Can't roster the same player as cpt and flex
         players_grouped_by_name = {}
@@ -425,8 +432,6 @@ class NFL_Showdown_Optimizer:
 
 
         # Crunch!
-        # for k in self.player_dict:
-        #     print(k, self.player_dict[k]['Position'])
         for i in range(self.num_lineups):
             try:
                 self.problem.solve(plp.PULP_CBC_CMD(msg=0))
@@ -435,16 +440,15 @@ class NFL_Showdown_Optimizer:
                     len(self.num_lineups), self.num_lineups))
 
             # Get the lineup and add it to our list
-            # self.problem.writeLP('file.lp')
+            self.problem.writeLP('file.lp')
             player_ids = [player for player in lp_variables if lp_variables[player].varValue != 0]
             players = []
             for key, value in self.player_dict.items():
                 if value['ID'] in player_ids:
                     players.append(key)
                     
-            # fpts = sum([self.player_dict[player]['Fpts'] for player in players])
-            
-            self.lineups.append(players)
+            fpts_used = self.problem.objective.value()
+            self.lineups.append((players, fpts_used))
             
             
             if i % 100 == 0:
@@ -464,16 +468,16 @@ class NFL_Showdown_Optimizer:
         print('Lineups done generating. Outputting.')
         
         # Sort each individual lineup so that 'CPT' player appears first
-        for idx, lineup in enumerate(self.lineups):
-            self.lineups[idx] = sorted(lineup, key=lambda player: player[1] != 'CPT')
+        for idx, lineup_tuple in enumerate(self.lineups):
+            self.lineups[idx] = (sorted(lineup_tuple[0], key=lambda player: player[1] != 'CPT'), lineup_tuple[1])
             
         formatted_timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         filename_out = f'../output/{self.site}_sd_optimal_lineups_{formatted_timestamp}.csv'
         out_path = os.path.join(os.path.dirname(__file__), filename_out)
         with open(out_path, 'w') as f:
             f.write(
-                    'CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Ceiling,Own. Product,Own. Sum,STDDEV,Stack Type\n')
-            for x in self.lineups:
+                    'CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Fpts Used,Ceiling,Own. Product,Own. Sum,STDDEV,Stack Type\n')
+            for x, fpts_used in self.lineups:
                 team_count = {}
                 for t in self.team_list:
                     team_count[t] = [1 if t in self.player_dict[player]['Team'] else 0 for player in x].count(1)
@@ -489,7 +493,7 @@ class NFL_Showdown_Optimizer:
                 own_p = np.prod([self.player_dict[player]['Ownership']/100 for player in x])
                 ceil = sum([self.player_dict[player]['Ceiling'] for player in x])
                 stddev = sum([self.player_dict[player]['StdDev'] for player in x])
-                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{}'.format(
+                lineup_str = '{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{},{}'.format(
                     self.player_dict[x[0]]['Name'], self.player_dict[x[0]]['ID'],
                     self.player_dict[x[1]]['Name'], self.player_dict[x[1]]['ID'],
                     self.player_dict[x[2]]['Name'], self.player_dict[x[2]]['ID'],
@@ -497,7 +501,7 @@ class NFL_Showdown_Optimizer:
                     self.player_dict[x[4]]['Name'], self.player_dict[x[4]]['ID'],
                     self.player_dict[x[5]]['Name'], self.player_dict[x[5]]['ID'],
                     salary, round(
-                        fpts_p, 2), ceil, own_p, own_s, stddev, team_stack_string[:-1]
+                        fpts_p, 2), round(fpts_used, 2), ceil, own_p, own_s, stddev, team_stack_string[:-1]
                 )
                 f.write('%s\n' % lineup_str)
             
