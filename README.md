@@ -110,8 +110,8 @@ The structure for the config is as follows:
     "stack_rules": { // This is where the magic happens
         "pair": [ // "pair" rules are rules designed to stack certain positions with other positions
             {
-                "key": "QB", // This "key" determines the rule is for every QB
-                "positions": ["WR", "TE"], // This field describes which positions to stack with. In this case, we want WRs and TEs
+                "key": "QB", // This "key" determines the rule is for every QB. In showdown, this refers to the CPT position. E.g. pair CPT QB with...
+                "positions": ["WR", "TE"], // This field describes which positions to stack with. In this case, we want WRs and TEs. In showdown, this refers to the FLEX positions. E.g. pair CPT QB with WR, TE from the FLEX
                 "count": 2, // The number of these positions to stack with the QB. In this configuration we can get QB + 2 WR, QB + 1WR&1TE, QB + 2TE (if using double tight end in the config)
                 "type": "same-team", // Can be 'same-team', 'same-game', or 'opp-team'. In this configuration, we are telling the optimizer to consider only WRs and TEs from the same team as the QB.
                 "exclude_teams": [] // If you don't want this rule to apply to a certain team, you can include them here. For example, ["ARI", "BAL"]
