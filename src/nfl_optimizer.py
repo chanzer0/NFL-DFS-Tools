@@ -27,6 +27,7 @@ class NFL_Optimizer:
     team_limits = {}
     matchup_limits = {}
     matchup_at_least = {}
+    max_player_vs_dst = 0
     stack_rules = {}
     global_team_limit = None
     use_double_te = True
@@ -111,6 +112,7 @@ class NFL_Optimizer:
         self.default_qb_var = self.config["default_qb_var"] if 'default_qb_var' in self.config else 0.333
         self.default_skillpos_var = self.config["default_skillpos_var"] if 'default_skillpos_var' in self.config else 0.5
         self.default_def_var = self.config["default_def_var"] if 'default_def_var' in self.config else 0.5
+        self.max_player_vs_dst = self.config["max_player_vs_dst"]
     
     def assertPlayerDict(self):
         for p, s in list(self.player_dict.items()):
@@ -268,7 +270,32 @@ class NFL_Optimizer:
                     if value['Matchup'] == matchup:
                         players_in_game.append(key)
                 self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
-                           
+                    
+        # Address max player vs dst 
+        if self.max_player_vs_dst == 0: 
+            for team, players in self.players_by_team.items():
+                for position in ['QB', 'RB', 'WR', 'TE']:
+                    for player in players.get(position, []):
+                        opponent = player['Opponent']
+                        opposing_dsts = self.players_by_team.get(opponent, {}).get('DST', [])
+                        
+                        for dst in opposing_dsts:
+                            self.problem += plp.lpSum(lp_variables[player['ID']] + lp_variables[dst['ID']]) <= 1, f"Player vs DST {player['Name']} vs {dst['Name']}"
+        else:  
+            for team, players in self.players_by_team.items():
+                opponent = players.get('QB', [{}])[0].get('Opponent', None)
+                if opponent is None:
+                    continue
+                opposing_dsts = self.players_by_team.get(opponent, {}).get('DST', [])
+
+                for dst in opposing_dsts:
+                    selected_players_from_team = [
+                        lp_variables[player['ID']] 
+                        for position in ['QB', 'RB', 'WR', 'TE'] 
+                        for player in players.get(position, [])
+                    ]
+                    self.problem += plp.lpSum(selected_players_from_team) + lp_variables[dst['ID']] <= self.max_player_vs_dst + 1, f"Max Player vs DST {team} vs {dst['Name']}"
+
         # Address stack rules
         for rule_type in self.stack_rules:
             for rule in self.stack_rules[rule_type]:
