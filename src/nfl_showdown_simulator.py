@@ -16,7 +16,7 @@ import re
 from scipy.stats import norm, kendalltau, multivariate_normal, gamma
 import matplotlib.pyplot as plt
 import seaborn as sns
-from numba import njit
+from numba import njit, jit
 import sys
 
 rng = np.random.Generator(np.random.PCG64())
@@ -849,20 +849,27 @@ class NFL_Showdown_Simulator:
             temp_fpts_dict[player['ID']] = player_samples[i]
 
         return temp_fpts_dict
-    
+
+
     @staticmethod
+    @jit(nopython=True)
     def calculate_payouts(args):
         (ranks, payout_array, entry_fee, field_lineup_keys, use_contest_data, field_lineups_count) = args
-        combined_result_dict = {key: 0 for key in field_lineup_keys}
+        num_lineups = len(field_lineup_keys)
+        combined_result_array = np.zeros(num_lineups)
+        
+        payout_cumsum = np.cumsum(payout_array)
+        
         for r in range(ranks.shape[1]):
             ranks_in_sim = ranks[:, r]
             payout_index = 0
             for lineup_index in ranks_in_sim:
                 lineup_count = field_lineups_count[lineup_index]
-                prize_for_lineup = sum(payout_array[payout_index:payout_index+lineup_count]) / lineup_count
-                combined_result_dict[lineup_index] += prize_for_lineup
+                prize_for_lineup = (payout_cumsum[payout_index+lineup_count-1] - payout_cumsum[payout_index-1]) / lineup_count if payout_index != 0 else payout_cumsum[payout_index+lineup_count-1] / lineup_count
+                combined_result_array[lineup_index] += prize_for_lineup
                 payout_index += lineup_count
-        return combined_result_dict
+        return combined_result_array
+
     
     def run_tournament_simulation(self):
         print(f"Running {self.num_iterations} simulations")
@@ -937,49 +944,46 @@ class NFL_Showdown_Simulator:
         # subtract entry fee
         payout_array = payout_array - self.entry_fee
         l_array = np.full(shape=self.field_size - len(payout_array), fill_value=-self.entry_fee)
-        payout_array = np.concatenate((payout_array, l_array))        
+        payout_array = np.concatenate((payout_array, l_array)) 
+        field_lineups_keys_array = np.array(list(self.field_lineups.keys()))
+       
         # Adjusted ROI calculation
         #print(field_lineups_count.shape, payout_array.shape, ranks.shape, fpts_array.shape)
 
         # Split the simulation indices into chunks
+        field_lineups_keys_array = np.array(list(self.field_lineups.keys()))
+
         chunk_size = self.num_iterations // 16 # Adjust chunk size as needed
         simulation_chunks = [
             ( 
-            ranks[:, i:min(i+chunk_size, self.num_iterations-1)].copy(), 
+            ranks[:, i:min(i+chunk_size, self.num_iterations)].copy(), 
             payout_array, 
             self.entry_fee, 
-            list(self.field_lineups.keys()), 
+            field_lineups_keys_array, 
             self.use_contest_data, 
             field_lineups_count)  # Adding field_lineups_count here
             for i in range(0, self.num_iterations, chunk_size)
         ]
-        #print(chunk_size, len(simulation_chunks), simulation_chunks[0])
+
         # Use the pool to process the chunks in parallel
         with mp.Pool() as pool:
             results = pool.map(self.calculate_payouts, simulation_chunks)
         
-        #print(results)
-        # Combine results
-        combined_result_dict = {}
-        for result_dict in results:
-            for idx, roi in result_dict.items():
-                if idx not in combined_result_dict:
-                    combined_result_dict[idx] = 0
-                combined_result_dict[idx] += roi
-        #print(combined_result_dict, ranks, payout_array, field_lineups_count)
-
-        # Update field_lineups with combined results
-        for idx, roi in combined_result_dict.items():
-            self.field_lineups[idx]["Lineup"]["ROI"] += roi
-        # Update Wins and Top10
+        combined_result_array = np.sum(results, axis=0)
+        total_sum = 0
+        index_to_key = list(self.field_lineups.keys())
+        for idx, roi in enumerate(combined_result_array):
+            lineup_key = index_to_key[idx]
+            lineup_count = self.field_lineups[lineup_key]["count"]  # Assuming "Count" holds the count of the lineups
+            total_sum += roi * lineup_count
+            self.field_lineups[lineup_key]["Lineup"]["ROI"] += roi
         
         for idx in self.field_lineups.keys():
             if idx in wins:
                 self.field_lineups[idx]["Lineup"]["Wins"] += win_counts[np.where(wins == idx)][0]
             if idx in t10:
                 self.field_lineups[idx]["Lineup"]["Top10"] += t10_counts[np.where(t10 == idx)][0]
-        
-        #print(self.field_lineups)
+                
         end_time = time.time()
         diff = end_time - start_time
         print(str(self.num_iterations) + " tournament simulations finished in " + str(diff) + " seconds. Outputting.")
