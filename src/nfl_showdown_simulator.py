@@ -19,11 +19,12 @@ import seaborn as sns
 from numba import njit
 import sys
 
+rng = np.random.Generator(np.random.PCG64())
+
 class NFL_Showdown_Simulator:
     config = None
     player_dict = {}
     field_lineups = {}
-    seen_lineups = {}
     stacks_dict = {}
     gen_lineup_list = []
     roster_construction = []
@@ -71,6 +72,8 @@ class NFL_Showdown_Simulator:
         )
         self.load_player_ids(player_path)
         self.load_team_stacks()
+        self.seen_lineups = {}
+        self.seen_lineups_ix = {}
 
         #ownership_path = os.path.join(
         #    os.path.dirname(__file__),
@@ -561,12 +564,28 @@ class NFL_Showdown_Simulator:
         #print(self.field_lineups)
 
     @staticmethod
-    def select_player(pos, in_lineup, ownership, ids, player_dict, def_opp=None, teams=None):
-        valid_players = np.where((pos > 0) & (in_lineup == 0) & ((teams != def_opp) if def_opp is not None else True))
+    def select_player(pos, in_lineup, ownership, ids, salaries, current_salary, remaining_salary, k, salary_floor=None, def_opp=None, teams=None):
+        valid_players = np.nonzero(
+            (pos > 0) & 
+            (in_lineup == 0) & 
+            (salaries <= remaining_salary) & 
+            ((current_salary + salaries >= salary_floor) if salary_floor is not None else True) 
+            #& ((teams != def_opp) if def_opp is not None else True)
+        )[0]
+        if len(valid_players) == 0:
+            #common_indices = set(np.where(pos > 0)[0]) & \
+            #     set(np.where(in_lineup == 0)[0]) & \
+            #     set(np.where(salaries <= remaining_salary)[0]) & \
+            #     set(np.where((current_salary + salaries >= salary_floor) if salary_floor is not None else True)[0]) & \
+            #     set(np.where((teams != def_opp) if def_opp is not None else True)[0])
+            #print(common_indices)
+            #print(current_salary, salary_floor, remaining_salary, k, np.where((current_salary + salaries >= salary_floor)), np.where(pos>0), np.where(salaries <= remaining_salary), np.where(in_lineup == 0), np.where(teams != def_opp) if def_opp is not None else True)
+            return None, None
         plyr_list = ids[valid_players]
         prob_list = ownership[valid_players] / ownership[valid_players].sum()
-        choice = np.random.choice(a=plyr_list, p=prob_list)
+        choice = rng.choice(a=plyr_list, p=prob_list)
         return np.where(ids == choice)[0], choice
+
 
     @staticmethod
     def validate_lineup(salary, salary_floor, salary_ceiling, proj, optimal_score, max_pct_off_optimal, player_teams):
@@ -577,7 +596,7 @@ class NFL_Showdown_Simulator:
         return False
 
     @staticmethod
-    def generate_lineups(lu_num, ids, in_lineup, pos_matrix, ownership, salary_floor, salary_ceiling, optimal_score, salaries, projections, max_pct_off_optimal, teams, opponents, overlap_limit, matchups, new_player_dict):
+    def generate_lineups(lu_num, ids, in_lineup, pos_matrix, ownership, salary_floor, salary_ceiling, optimal_score, salaries, projections, max_pct_off_optimal, teams, opponents, overlap_limit, matchups, new_player_dict, num_players_in_roster):
         np.random.seed(lu_num)
         lus = {}
         in_lineup.fill(0)
@@ -589,11 +608,22 @@ class NFL_Showdown_Simulator:
             def_opp, players_opposing_def, cpt_selected = None, 0, False
             in_lineup.fill(0)
             cpt_name = None
+            remaining_salary = salary_ceiling
 
             for k, pos in enumerate(pos_matrix.T):
                 position_constraint = k >= 1 and players_opposing_def < overlap_limit
-                choice_idx, choice = NFL_Showdown_Simulator.select_player(pos, in_lineup, ownership, ids, def_opp if position_constraint else None, teams if position_constraint else None)
-                
+                choice_idx, choice = NFL_Showdown_Simulator.select_player(
+                pos, in_lineup, ownership, ids, salaries, salary,  remaining_salary, k, salary_floor if k==num_players_in_roster-1 else None,
+                def_opp if position_constraint else None, teams if position_constraint else None)
+                if choice is None:
+                    iteration_count += 1
+                    salary, proj = 0, 0
+                    lineup, player_teams, lineup_matchups = [], [], []
+                    def_opp, players_opposing_def, cpt_selected = None, 0, False
+                    in_lineup.fill(0)
+                    cpt_name = None
+                    remaining_salary = salary_ceiling      
+                    continue                           
                 if k == 0:
                     cpt_player_info = new_player_dict[choice]
                     flex_choice_idx = next((i for i, v in enumerate(new_player_dict.values()) if v["Name"] == cpt_player_info["Name"] and v["Team"] == cpt_player_info["Team"] and v["Position"] == cpt_player_info["Position"] and v["rosterPosition"] == "FLEX"), None)
@@ -609,9 +639,8 @@ class NFL_Showdown_Simulator:
                 in_lineup[choice_idx] = 1
                 salary += salaries[choice_idx]
                 proj += projections[choice_idx]
-
-
-
+                remaining_salary = salary_ceiling - salary
+                
                 #lineup_matchups.append(matchups[choice_idx[0]])
                 player_teams.append(teams[choice_idx][0])
                 
@@ -656,6 +685,7 @@ class NFL_Showdown_Simulator:
         # Handle stacks logic
         #stacks = self.handle_stacks_logic(diff)
         #print(problems)
+        #print(self.player_dict)
         
         start_time = time.time()
         
@@ -698,9 +728,10 @@ class NFL_Showdown_Simulator:
         ownership, salaries, projections, pos_matrix = map(np.array, [ownership, salaries, projections, positions])
         teams, opponents, ids = map(np.array, [teams, opponents, ids])
         new_player_dict = self.remap_player_dict(self.player_dict)
+        num_players_in_roster = len(self.roster_construction)
         problems = []
         for i in range(diff):
-            lu_tuple = (i, ids, in_lineup, pos_matrix, ownership, self.min_lineup_salary, self.salary, self.optimal_score, salaries, projections, self.max_pct_off_optimal, teams, opponents, self.overlap_limit, matchups, new_player_dict)
+            lu_tuple = (i, ids, in_lineup, pos_matrix, ownership, self.min_lineup_salary, self.salary, self.optimal_score, salaries, projections, self.max_pct_off_optimal, teams, opponents, self.overlap_limit, matchups, new_player_dict, num_players_in_roster)
             problems.append(lu_tuple)
         #print(self.player_dict.keys())
         return problems
@@ -727,20 +758,28 @@ class NFL_Showdown_Simulator:
 
         nk = new_keys[0]
         for i, o in enumerate(output):
-            lineup_tuple = tuple(next(iter(o.values()))['Lineup'])   # Getting the list associated with the 'Lineup' key and converting it to a tuple
-            
-            # Keeping track of lineup duplication counts
-            if lineup_tuple in self.seen_lineups:
-                self.seen_lineups[lineup_tuple] += 1
-            else:
-                self.seen_lineups[lineup_tuple] = 1
+            lineup_list = next(iter(o.values()))['Lineup']
+            lineup_set = frozenset(lineup_list)  # Convert the list to a frozenset
 
-            # Updating the field lineups dictionary
-            if nk in self.field_lineups.keys():
-                print("bad lineups dict, please check dk_data files")
+            # Keeping track of lineup duplication counts
+            if lineup_set in self.seen_lineups:
+                self.seen_lineups[lineup_set] += 1
+                
+                # Increase the count in field_lineups using the index stored in seen_lineups_ix
+                self.field_lineups[self.seen_lineups_ix[lineup_set]]["count"] += 1
             else:
-                self.field_lineups[nk] = {"Lineup": next(iter(o.values())), "count": self.seen_lineups[lineup_tuple]}
-                nk += 1
+                self.seen_lineups[lineup_set] = 1
+                
+                # Updating the field lineups dictionary
+                if nk in self.field_lineups.keys():
+                    print("bad lineups dict, please check dk_data files")
+                else:
+                    self.field_lineups[nk] = {"Lineup": next(iter(o.values())), "count": self.seen_lineups[lineup_set]}
+                    
+                    # Store the new nk in seen_lineups_ix for quick access in the future
+                    self.seen_lineups_ix[lineup_set] = nk
+                    nk += 1
+
 
 
     def calc_gamma(self,mean,sd):
@@ -812,45 +851,22 @@ class NFL_Showdown_Simulator:
         return temp_fpts_dict
     
     @staticmethod
-    def process_simulation_chunk(args):
-        
-        simulation_indices, ranks, fpts_array, payout_array, entry_fee, field_lineups_keys, use_contest_data = args
-        #print('starting chunk:' + str(simulation_indices))
-        result_dict = {}
-        num_simulations = len(simulation_indices)
-        for simulation_index in range(num_simulations):
-            ranks_in_sim = ranks[:, simulation_index]
-            scores_in_sim = fpts_array[:, simulation_index]
-
-            unique, counts = np.unique(scores_in_sim, return_counts=True)
-            score_to_count = dict(zip(unique, counts))
-
-            payouts_in_sim = np.full(len(field_lineups_keys), -entry_fee)
-            
-        for idx, score in enumerate(unique):
-            tie_count = score_to_count[score]
-            indices = np.where(scores_in_sim == score)[0]
-
-            if tie_count == 1:
-                payouts_in_sim[indices] = payout_array[indices]
-            else:
-                total_payout = sum(payout_array[i] for i in indices)
-                average_payout = total_payout / tie_count
-                payouts_in_sim[indices] = average_payout
-
-            # Using numpy array instead of iterating through keys can help speed up the code
-        if use_contest_data:
-            results_in_sim = payouts_in_sim[ranks_in_sim]
-            for idx, roi in zip(field_lineups_keys, results_in_sim):
-                if idx not in result_dict:
-                    result_dict[idx] = 0
-                result_dict[idx] += roi
-
-        #print('chunk done:' + str(simulation_indices))
-        return result_dict
-
+    def calculate_payouts(args):
+        (ranks, payout_array, entry_fee, field_lineup_keys, use_contest_data, field_lineups_count) = args
+        combined_result_dict = {key: 0 for key in field_lineup_keys}
+        for r in range(ranks.shape[1]):
+            ranks_in_sim = ranks[:, r]
+            payout_index = 0
+            for lineup_index in ranks_in_sim:
+                lineup_count = field_lineups_count[lineup_index]
+                prize_for_lineup = sum(payout_array[payout_index:payout_index+lineup_count]) / lineup_count
+                combined_result_dict[lineup_index] += prize_for_lineup
+                payout_index += lineup_count
+        return combined_result_dict
+    
     def run_tournament_simulation(self):
         print(f"Running {self.num_iterations} simulations")
+        print(len(self.field_lineups.keys()))
         
         def generate_cpt_outcomes(flex_dict):
             cpt_dict = {}
@@ -888,12 +904,14 @@ class NFL_Showdown_Simulator:
         cpt_outcomes_dict = generate_cpt_outcomes(temp_fpts_dict)
         temp_fpts_dict.update(cpt_outcomes_dict)
       # generate arrays for every sim result for each player in the lineup and sum
-        fpts_array = np.zeros(shape=(self.field_size, self.num_iterations))
+        fpts_array = np.zeros(shape=(len(self.field_lineups), self.num_iterations))
         # converting payout structure into an np friendly format, could probably just do this in the load contest function
         #print(self.field_lineups)
         #print(temp_fpts_dict)
         #print(payout_array)
         #print(self.player_dict[('patrick mahomes', 'FLEX', 'KC')])
+        field_lineups_count = np.array([self.field_lineups[idx]['count'] for idx in self.field_lineups.keys()])
+
         for index, values in self.field_lineups.items():
             try:
                 fpts_sim = sum([temp_fpts_dict[player] for player in values["Lineup"]["Lineup"]])
@@ -910,7 +928,7 @@ class NFL_Showdown_Simulator:
         
         fpts_array = fpts_array.astype(np.float16)
         #ranks = np.argsort(fpts_array, axis=0)[::-1].astype(np.uint16)
-        ranks = np.argsort(-fpts_array, axis=0).astype(np.uint16)
+        ranks = np.argsort(-fpts_array, axis=0).astype(np.uint32)
 
         # count wins, top 10s vectorized
         wins, win_counts = np.unique(ranks[0, :], return_counts=True)
@@ -921,18 +939,26 @@ class NFL_Showdown_Simulator:
         l_array = np.full(shape=self.field_size - len(payout_array), fill_value=-self.entry_fee)
         payout_array = np.concatenate((payout_array, l_array))        
         # Adjusted ROI calculation
+        #print(field_lineups_count.shape, payout_array.shape, ranks.shape, fpts_array.shape)
 
         # Split the simulation indices into chunks
-        chunk_size = self.num_iterations // 3 # Adjust chunk size as needed
+        chunk_size = self.num_iterations // 16 # Adjust chunk size as needed
         simulation_chunks = [
-            (range(i, min(i+chunk_size, self.num_iterations)), ranks[:, i:min(i+chunk_size, self.num_iterations)].copy(), fpts_array[:, i:min(i+chunk_size, self.num_iterations)].copy(), payout_array, self.entry_fee, list(self.field_lineups.keys()), self.use_contest_data) 
+            ( 
+            ranks[:, i:min(i+chunk_size, self.num_iterations-1)].copy(), 
+            payout_array, 
+            self.entry_fee, 
+            list(self.field_lineups.keys()), 
+            self.use_contest_data, 
+            field_lineups_count)  # Adding field_lineups_count here
             for i in range(0, self.num_iterations, chunk_size)
         ]
         #print(chunk_size, len(simulation_chunks), simulation_chunks[0])
         # Use the pool to process the chunks in parallel
         with mp.Pool() as pool:
-            results = pool.map(self.process_simulation_chunk, simulation_chunks)
+            results = pool.map(self.calculate_payouts, simulation_chunks)
         
+        #print(results)
         # Combine results
         combined_result_dict = {}
         for result_dict in results:
@@ -940,6 +966,7 @@ class NFL_Showdown_Simulator:
                 if idx not in combined_result_dict:
                     combined_result_dict[idx] = 0
                 combined_result_dict[idx] += roi
+        #print(combined_result_dict, ranks, payout_array, field_lineups_count)
 
         # Update field_lineups with combined results
         for idx, roi in combined_result_dict.items():
@@ -1044,18 +1071,19 @@ class NFL_Showdown_Simulator:
             
             for val in self.field_lineups.values():
                 lineup_data = val['Lineup']
+                counts = val['count']
                 for player_id in lineup_data['Lineup']:
                     if player_id not in unique_players:
                         unique_players[player_id] = {
                             "Wins": lineup_data["Wins"],
                             "Top10": lineup_data["Top10"],
-                            "In": 1,
+                            "In": val['count'],
                             "ROI": lineup_data["ROI"],
                         }
                     else:
                         unique_players[player_id]["Wins"] += lineup_data["Wins"]
                         unique_players[player_id]["Top10"] += lineup_data["Top10"]
-                        unique_players[player_id]["In"] += 1
+                        unique_players[player_id]["In"] += val['count']
                         unique_players[player_id]["ROI"] += lineup_data["ROI"]
 
             for player_id, data in unique_players.items():

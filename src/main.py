@@ -1,9 +1,7 @@
 import sys
-from nfl_gpp_simulator import *
 from windows_inhibitor import *
 from nfl_showdown_optimizer import *
 from nfl_optimizer import *
-from nfl_showdown_simulator import *
 
 def main(arguments):
     if len(arguments) < 3 or len(arguments) > 7:
@@ -28,6 +26,7 @@ def main(arguments):
         opto.output()
     
     elif process == 'sd_sim':
+        import nfl_showdown_simulator
         field_size = -1
         num_iterations = -1
         use_contest_data = False
@@ -45,7 +44,7 @@ def main(arguments):
             num_iterations = arguments[4]
         #if 'match' in arguments:
         #    match_lineup_input_to_field_size = True
-        sim = NFL_Showdown_Simulator(site, field_size, num_iterations, use_contest_data,
+        sim = nfl_showdown_simulator.NFL_Showdown_Simulator(site, field_size, num_iterations, use_contest_data,
                                 use_file_upload)
         sim.generate_field_lineups()
         sim.run_tournament_simulation()
@@ -53,6 +52,7 @@ def main(arguments):
         
 
     elif process == 'sim':
+        import nfl_gpp_simulator
         site = arguments[1]
         field_size = -1
         num_iterations = -1
@@ -71,7 +71,7 @@ def main(arguments):
             num_iterations = arguments[4]
         #if 'match' in arguments:
         #    match_lineup_input_to_field_size = True
-        sim = NFL_GPP_Simulator(site, field_size, num_iterations, use_contest_data,
+        sim = nfl_gpp_simulator.NFL_GPP_Simulator(site, field_size, num_iterations, use_contest_data,
                                 use_file_upload)
         sim.generate_field_lineups()
         sim.run_tournament_simulation()
