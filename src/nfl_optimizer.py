@@ -28,6 +28,7 @@ class NFL_Optimizer:
     team_limits = {}
     matchup_limits = {}
     matchup_at_least = {}
+    allow_qb_vs_dst = False
     stack_rules = {}
     global_team_limit = None
     use_double_te = True
@@ -111,6 +112,7 @@ class NFL_Optimizer:
                             "id"
                         ]
 
+
     def load_rules(self):
         self.at_most = self.config["at_most"]
         self.at_least = self.config["at_least"]
@@ -122,6 +124,7 @@ class NFL_Optimizer:
         self.stack_rules = self.config["stack_rules"]
         self.matchup_at_least = self.config["matchup_at_least"]
         self.matchup_limits = self.config["matchup_limits"]
+        self.allow_qb_vs_dst = bool(self.config["allow_qb_vs_dst"])
         self.default_qb_var = (
             self.config["default_qb_var"] if "default_qb_var" in self.config else 0.333
         )
@@ -374,6 +377,18 @@ class NFL_Optimizer:
                 for key, value in self.player_dict.items():
                     if value["Matchup"] == matchup:
                         players_in_game.append(key)
+
+                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
+                    
+        # Address player vs dst (only applies to QB vs DST)
+        if not self.allow_qb_vs_dst:
+            for team, players in self.players_by_team.items():
+                for qb in players.get('QB', []):
+                    opponent = qb['Opponent']
+                    opposing_dsts = self.players_by_team.get(opponent, {}).get('DST', [])
+                    for dst in opposing_dsts:
+                        self.problem += plp.lpSum(lp_variables[qb['ID']] + lp_variables[dst['ID']]) <= 1, f"No QB vs DST {qb['Name']} vs {dst['Name']}"
+
                 self.problem += (
                     plp.lpSum(
                         lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
@@ -382,6 +397,7 @@ class NFL_Optimizer:
                     >= int(limit),
                     f"Matchup at least {matchup} {limit}",
                 )
+
 
         # Address stack rules
         for rule_type in self.stack_rules:

@@ -14,6 +14,7 @@
     "default_qb_var" : 0.4, 
     "default_skillpos_var" : 0.5, 
     "default_def_var" : 0.5,
+    "allow_qb_vs_dst": false,
     "at_most": {
         "1": [["Ezekiel Elliott", "Tony Pollard"]]
     },
