@@ -11,6 +11,7 @@ import itertools
 from random import shuffle, choice
 from collections import Counter
 
+
 class NFL_Optimizer:
     site = None
     config = None
@@ -36,9 +37,7 @@ class NFL_Optimizer:
     default_qb_var = 0.4
     default_skillpos_var = 0.5
     default_def_var = 0.5
-    team_rename_dict = {
-        "LA": "LAR"
-    }
+    team_rename_dict = {"LA": "LAR"}
 
     def __init__(self, site=None, num_lineups=0, num_uniques=1):
         self.site = site
@@ -47,14 +46,18 @@ class NFL_Optimizer:
         self.load_config()
         self.load_rules()
 
-        self.problem = plp.LpProblem('NFL', plp.LpMaximize)
+        self.problem = plp.LpProblem("NFL", plp.LpMaximize)
 
-        projection_path = os.path.join(os.path.dirname(
-            __file__), '../{}_data/{}'.format(site, self.config['projection_path']))
+        projection_path = os.path.join(
+            os.path.dirname(__file__),
+            "../{}_data/{}".format(site, self.config["projection_path"]),
+        )
         self.load_projections(projection_path)
 
-        player_path = os.path.join(os.path.dirname(
-            __file__), '../{}_data/{}'.format(site, self.config['player_path']))
+        player_path = os.path.join(
+            os.path.dirname(__file__),
+            "../{}_data/{}".format(site, self.config["player_path"]),
+        )
         self.load_player_ids(player_path)
         self.assertPlayerDict()
 
@@ -67,7 +70,9 @@ class NFL_Optimizer:
 
     # Load config from file
     def load_config(self):
-        with open(os.path.join(os.path.dirname(__file__), '../config.json')) as json_file:
+        with open(
+            os.path.join(os.path.dirname(__file__), "../config.json")
+        ) as json_file:
             self.config = json.load(json_file)
 
     # Load player IDs for exporting
@@ -75,28 +80,37 @@ class NFL_Optimizer:
         with open(path) as file:
             reader = csv.DictReader(self.lower_first(file))
             for row in reader:
-                name_key = 'name' if self.site == 'dk' else 'nickname'
-                player_name = row[name_key].replace('-', '#').lower().strip()
-                position = row['roster position'].split('/')[0] if self.site == 'dk' else row['position']
-                if position == 'D' and self.site == 'fd':
-                    position = 'DST'
-                team = row['teamabbrev'] if self.site == 'dk' else row['team']
+                name_key = "name" if self.site == "dk" else "nickname"
+                player_name = row[name_key].replace("-", "#").lower().strip()
+                position = (
+                    row["roster position"].split("/")[0]
+                    if self.site == "dk"
+                    else row["position"]
+                )
+                if position == "D" and self.site == "fd":
+                    position = "DST"
+                team = row["teamabbrev"] if self.site == "dk" else row["team"]
                 if (player_name, position, team) in self.player_dict:
-                    if self.site == 'dk':
-                        matchup = row['game info'].split(' ')[0]
-                        teams = matchup.split('@')
+                    if self.site == "dk":
+                        matchup = row["game info"].split(" ")[0]
+                        teams = matchup.split("@")
                         opponent = teams[0] if teams[0] != team else teams[1]
-                    elif self.site == 'fd':
-                        matchup = row['game']
-                        teams = matchup.split('@')
-                        opponent = row['opponent']
-                    self.player_dict[(player_name, position, team)]['Opponent'] = opponent
-                    self.player_dict[(player_name, position, team)]['Matchup'] = matchup
-                    if self.site == 'dk':
-                        self.player_dict[(player_name, position, team)]['ID'] = int(
-                            row['id'])
+                    elif self.site == "fd":
+                        matchup = row["game"]
+                        teams = matchup.split("@")
+                        opponent = row["opponent"]
+                    self.player_dict[(player_name, position, team)][
+                        "Opponent"
+                    ] = opponent
+                    self.player_dict[(player_name, position, team)]["Matchup"] = matchup
+                    if self.site == "dk":
+                        self.player_dict[(player_name, position, team)]["ID"] = int(
+                            row["id"]
+                        )
                     else:
-                        self.player_dict[(player_name, position, team)]['ID'] = row['id']
+                        self.player_dict[(player_name, position, team)]["ID"] = row[
+                            "id"
+                        ]
 
 
     def load_rules(self):
@@ -122,87 +136,104 @@ class NFL_Optimizer:
         self.default_def_var = (
             self.config["default_def_var"] if "default_def_var" in self.config else 0.5
         )
-    
+
     def assertPlayerDict(self):
         for p, s in list(self.player_dict.items()):
-            if s["ID"] == 0 or s['ID'] == '' or s['ID'] is None:
-                print(s['Name'] + ' name mismatch between projections and player ids, excluding from player_dict')
+            if s["ID"] == 0 or s["ID"] == "" or s["ID"] is None:
+                print(
+                    s["Name"]
+                    + " name mismatch between projections and player ids, excluding from player_dict"
+                )
                 self.player_dict.pop(p)
 
     # Load projections from file
     def load_projections(self, path):
         # Read projections into a dictionary
-        with open(path, encoding='utf-8-sig') as file:
+        with open(path, encoding="utf-8-sig") as file:
             reader = csv.DictReader(self.lower_first(file))
             for row in reader:
-                player_name = row['name'].replace('-', '#').lower().strip()
+                player_name = row["name"].replace("-", "#").lower().strip()
                 try:
                     fpts = float(row["fpts"])
                 except:
                     fpts = 0
-                    print('unable to load player fpts: ' + player_name + ', fpts:' + row['fpts'])
-                position = row['position']
-                if position == 'D' or position == 'DEF':
-                    position = 'DST'
-                    
-                team = row['team']
+                    print(
+                        "unable to load player fpts: "
+                        + player_name
+                        + ", fpts:"
+                        + row["fpts"]
+                    )
+                position = row["position"]
+                if position == "D" or position == "DEF":
+                    position = "DST"
+
+                team = row["team"]
                 if team in self.team_rename_dict:
                     team = self.team_rename_dict[team]
-                    
-                if team == 'JAX' and self.site == 'fd':
-                    team = 'JAC'
-                if 'stddev' in row:
-                    if row['stddev'] == '' or float(row['stddev']) == 0:
-                        if position == 'QB':
-                            stddev = fpts* self.default_qb_var
-                        elif position == 'DST':
-                            stddev = fpts* self.default_def_var
+
+                if team == "JAX" and self.site == "fd":
+                    team = "JAC"
+                if "stddev" in row:
+                    if row["stddev"] == "" or float(row["stddev"]) == 0:
+                        if position == "QB":
+                            stddev = fpts * self.default_qb_var
+                        elif position == "DST":
+                            stddev = fpts * self.default_def_var
                         else:
-                            stddev = fpts*self.default_skillpos_var
+                            stddev = fpts * self.default_skillpos_var
                     else:
                         stddev = float(row["stddev"])
                 else:
                     stddev = float(stddev)
-                    if position == 'QB':
-                        stddev = fpts* self.default_qb_var
-                    elif position == 'DST':
-                        stddev = fpts* self.default_def_var
+                    if position == "QB":
+                        stddev = fpts * self.default_qb_var
+                    elif position == "DST":
+                        stddev = fpts * self.default_def_var
                     else:
-                        stddev = fpts*self.default_skillpos_var
-                if 'ceiling' in row:
-                    if row['ceiling'] == '' or float(row['ceiling'])==0:
-                        ceil = fpts+stddev
+                        stddev = fpts * self.default_skillpos_var
+                if "ceiling" in row:
+                    if row["ceiling"] == "" or float(row["ceiling"]) == 0:
+                        ceil = fpts + stddev
                     else:
-                        ceil = float(row['ceiling'])
+                        ceil = float(row["ceiling"])
                 else:
-                    ceil = fpts+stddev
-                own = float(row['own%'].replace('%','')) 
+                    ceil = fpts + stddev
+                own = float(row["own%"].replace("%", ""))
                 if own == 0:
                     own = 0.1
-                if float(row['fpts']) < self.projection_minimum and row['position'] != 'DST':
+                if (
+                    float(row["fpts"]) < self.projection_minimum
+                    and row["position"] != "DST"
+                ):
                     continue
                 self.player_dict[(player_name, position, team)] = {
-                    'Fpts': fpts,
-                    'Position': position,
-                    'ID': 0,
-                    'Salary': int(row['salary'].replace(',','')),
-                    'Name': row['name'],
-                    'Matchup': '',
-                    'Team': team,
-                    'Ownership': own,
-                    'Ceiling': ceil,
-                    'StdDev': stddev,
+                    "Fpts": fpts,
+                    "Position": position,
+                    "ID": 0,
+                    "Salary": int(row["salary"].replace(",", "")),
+                    "Name": row["name"],
+                    "Matchup": "",
+                    "Team": team,
+                    "Ownership": own,
+                    "Ceiling": ceil,
+                    "StdDev": stddev,
                 }
-                
+
                 if team not in self.team_list:
                     self.team_list.append(team)
-                    
+
                 if team not in self.players_by_team:
                     self.players_by_team[team] = {
-                        'QB': [], 'RB': [], 'WR': [], 'TE': [], 'DST': []
+                        "QB": [],
+                        "RB": [],
+                        "WR": [],
+                        "TE": [],
+                        "DST": [],
                     }
-                
-                self.players_by_team[team][position].append(self.player_dict[(player_name, position, team)])
+
+                self.players_by_team[team][position].append(
+                    self.player_dict[(player_name, position, team)]
+                )
 
     def optimize(self):
         # Setup our linear programming equation - https://en.wikipedia.org/wiki/Linear_programming
@@ -210,74 +241,143 @@ class NFL_Optimizer:
 
         # We want to create a variable for each roster slot.
         # There will be an index for each player and the variable will be binary (0 or 1) representing whether the player is included or excluded from the roster.
-        lp_variables = {self.player_dict[(player, pos_str, team)]['ID']: plp.LpVariable(
-            str(self.player_dict[(player, pos_str, team)]['ID']), cat='Binary'
-            ) for (player, pos_str, team) in self.player_dict}
+        lp_variables = {
+            self.player_dict[(player, pos_str, team)]["ID"]: plp.LpVariable(
+                str(self.player_dict[(player, pos_str, team)]["ID"]), cat="Binary"
+            )
+            for (player, pos_str, team) in self.player_dict
+        }
 
         # set the objective - maximize fpts & set randomness amount from config
         if self.randomness_amount != 0:
-            self.problem += plp.lpSum(np.random.normal(self.player_dict[(player, pos_str, team)]['Fpts'],
-                                                        (self.player_dict[(player, pos_str, team)]['StdDev'] * self.randomness_amount / 100))
-                                        * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                             for (player, pos_str, team) in self.player_dict), 'Objective'
+            self.problem += (
+                plp.lpSum(
+                    np.random.normal(
+                        self.player_dict[(player, pos_str, team)]["Fpts"],
+                        (
+                            self.player_dict[(player, pos_str, team)]["StdDev"]
+                            * self.randomness_amount
+                            / 100
+                        ),
+                    )
+                    * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                ),
+                "Objective",
+            )
         else:
-            self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Fpts'] * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                             for (player, pos_str, team) in self.player_dict), 'Objective'
-        
+            self.problem += (
+                plp.lpSum(
+                    self.player_dict[(player, pos_str, team)]["Fpts"]
+                    * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                ),
+                "Objective",
+            )
+
         # Set the salary constraints
-        max_salary = 50000 if self.site == 'dk' else 60000
-        min_salary = 45000 if self.site == 'dk' else 55000
-        self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Salary'] *
-                                  lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict) <= max_salary, 'Max Salary'
-        self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Salary'] *
-                                  lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict) >= min_salary, 'Min Salary'
+        max_salary = 50000 if self.site == "dk" else 60000
+        min_salary = 45000 if self.site == "dk" else 55000
+        self.problem += (
+            plp.lpSum(
+                self.player_dict[(player, pos_str, team)]["Salary"]
+                * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                for (player, pos_str, team) in self.player_dict
+            )
+            <= max_salary,
+            "Max Salary",
+        )
+        self.problem += (
+            plp.lpSum(
+                self.player_dict[(player, pos_str, team)]["Salary"]
+                * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                for (player, pos_str, team) in self.player_dict
+            )
+            >= min_salary,
+            "Min Salary",
+        )
 
         # Address limit rules if any
         for limit, groups in self.at_least.items():
             for group in groups:
                 tuple_name_list = []
                 for key, value in self.player_dict.items():
-                    if value['Name'] in group:
+                    if value["Name"] in group:
                         tuple_name_list.append(key)
-                        
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                                          for (player, pos_str, team) in tuple_name_list) >= int(limit), f'At least {limit} players {tuple_name_list}'
+
+                self.problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in tuple_name_list
+                    )
+                    >= int(limit),
+                    f"At least {limit} players {tuple_name_list}",
+                )
 
         for limit, groups in self.at_most.items():
             for group in groups:
                 tuple_name_list = []
                 for key, value in self.player_dict.items():
-                    if value['Name'] in group:
+                    if value["Name"] in group:
                         tuple_name_list.append(key)
-                        
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                                          for (player, pos_str, team) in tuple_name_list) <= int(limit), f'At most {limit} players {tuple_name_list}'
+
+                self.problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in tuple_name_list
+                    )
+                    <= int(limit),
+                    f"At most {limit} players {tuple_name_list}",
+                )
 
         # Address team limits
-        for team, limit in self.team_limits.items():
-            self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                                      for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= int(limit), f'Team limit {team} {limit}'
+        for teamIdent, limit in self.team_limits.items():
+            self.problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if self.player_dict[(player, pos_str, team)]["Team"] == teamIdent
+                )
+                <= int(limit),
+                f"Team limit {teamIdent} {limit}",
+            )
 
         if self.global_team_limit is not None:
             for limit_team in self.team_list:
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                                          for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == limit_team) <= int(self.global_team_limit), f'Global team limit {limit_team} {self.global_team_limit}'
-                
+                self.problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in self.player_dict
+                        if self.player_dict[(player, pos_str, team)]["Team"]
+                        == limit_team
+                    )
+                    <= int(self.global_team_limit),
+                    f"Global team limit {limit_team} {self.global_team_limit}",
+                )
+
         # Address matchup limits
         if self.matchup_limits is not None:
             for matchup, limit in self.matchup_limits.items():
                 players_in_game = []
                 for key, value in self.player_dict.items():
-                    if value['Matchup'] == matchup:
+                    if value["Matchup"] == matchup:
                         players_in_game.append(key)
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) <= int(limit), f'Matchup limit {matchup} {limit}'
-        
+                self.problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in players_in_game
+                    )
+                    <= int(limit),
+                    f"Matchup limit {matchup} {limit}",
+                )
+
         if self.matchup_at_least is not None:
             for matchup, limit in self.matchup_limits.items():
                 players_in_game = []
                 for key, value in self.player_dict.items():
-                    if value['Matchup'] == matchup:
+                    if value["Matchup"] == matchup:
                         players_in_game.append(key)
+
                 self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
                     
         # Address player vs dst (only applies to QB vs DST)
@@ -288,6 +388,16 @@ class NFL_Optimizer:
                     opposing_dsts = self.players_by_team.get(opponent, {}).get('DST', [])
                     for dst in opposing_dsts:
                         self.problem += plp.lpSum(lp_variables[qb['ID']] + lp_variables[dst['ID']]) <= 1, f"No QB vs DST {qb['Name']} vs {dst['Name']}"
+
+                self.problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in players_in_game
+                    )
+                    >= int(limit),
+                    f"Matchup at least {matchup} {limit}",
+                )
+
 
         # Address stack rules
         for rule_type in self.stack_rules:
