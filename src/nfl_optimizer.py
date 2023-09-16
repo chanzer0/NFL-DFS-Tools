@@ -98,6 +98,7 @@ class NFL_Optimizer:
                     else:
                         self.player_dict[(player_name, position, team)]['ID'] = row['id']
 
+
     def load_rules(self):
         self.at_most = self.config["at_most"]
         self.at_least = self.config["at_least"]
@@ -109,10 +110,18 @@ class NFL_Optimizer:
         self.stack_rules = self.config["stack_rules"]
         self.matchup_at_least = self.config["matchup_at_least"]
         self.matchup_limits = self.config["matchup_limits"]
-        self.default_qb_var = self.config["default_qb_var"] if 'default_qb_var' in self.config else 0.333
-        self.default_skillpos_var = self.config["default_skillpos_var"] if 'default_skillpos_var' in self.config else 0.5
-        self.default_def_var = self.config["default_def_var"] if 'default_def_var' in self.config else 0.5
-        self.allow_qb_vs_dst = self.config["allow_qb_vs_dst"]
+        self.allow_qb_vs_dst = bool(self.config["allow_qb_vs_dst"])
+        self.default_qb_var = (
+            self.config["default_qb_var"] if "default_qb_var" in self.config else 0.333
+        )
+        self.default_skillpos_var = (
+            self.config["default_skillpos_var"]
+            if "default_skillpos_var" in self.config
+            else 0.5
+        )
+        self.default_def_var = (
+            self.config["default_def_var"] if "default_def_var" in self.config else 0.5
+        )
     
     def assertPlayerDict(self):
         for p, s in list(self.player_dict.items()):
@@ -277,7 +286,6 @@ class NFL_Optimizer:
                 for qb in players.get('QB', []):
                     opponent = qb['Opponent']
                     opposing_dsts = self.players_by_team.get(opponent, {}).get('DST', [])
-                    
                     for dst in opposing_dsts:
                         self.problem += plp.lpSum(lp_variables[qb['ID']] + lp_variables[dst['ID']]) <= 1, f"No QB vs DST {qb['Name']} vs {dst['Name']}"
 
