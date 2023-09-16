@@ -217,7 +217,6 @@ class NFL_Optimizer:
         
         # Set the salary constraints
         max_salary = 50000 if self.site == 'dk' else 60000
-        # min_salary = 45000 if self.site == 'dk' else 55000
         min_salary = 45000 if self.site == 'dk' else 55000
         self.problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Salary'] *
                                   lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in self.player_dict) <= max_salary, 'Max Salary'
