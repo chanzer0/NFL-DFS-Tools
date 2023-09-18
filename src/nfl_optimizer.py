@@ -111,7 +111,6 @@ class NFL_Optimizer:
                             "id"
                         ]
 
-
     def load_rules(self):
         self.at_most = self.config["at_most"]
         self.at_least = self.config["at_least"]
@@ -341,19 +340,17 @@ class NFL_Optimizer:
                 f"Team limit {teamIdent} {limit}",
             )
 
-
         if self.global_team_limit is not None:
             team_limit = int(self.global_team_limit)
         else:
             team_limit = 5 if self.site == "dk" else 4
-            
+
         for limit_team in self.team_list:
             self.problem += (
                 plp.lpSum(
                     lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
                     for (player, pos_str, team) in self.player_dict
-                    if self.player_dict[(player, pos_str, team)]["Team"]
-                    == limit_team
+                    if self.player_dict[(player, pos_str, team)]["Team"] == limit_team
                 )
                 <= team_limit,
                 f"Global team limit {limit_team} {team_limit}",
@@ -382,17 +379,6 @@ class NFL_Optimizer:
                     if value["Matchup"] == matchup:
                         players_in_game.append(key)
 
-                self.problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]['ID']] for (player, pos_str, team) in players_in_game) >= int(limit), f'Matchup at least {matchup} {limit}'
-                    
-        # Address player vs dst (only applies to QB vs DST)
-        if not self.allow_qb_vs_dst:
-            for team, players in self.players_by_team.items():
-                for qb in players.get('QB', []):
-                    opponent = qb['Opponent']
-                    opposing_dsts = self.players_by_team.get(opponent, {}).get('DST', [])
-                    for dst in opposing_dsts:
-                        self.problem += plp.lpSum(lp_variables[qb['ID']] + lp_variables[dst['ID']]) <= 1, f"No QB vs DST {qb['Name']} vs {dst['Name']}"
-
                 self.problem += (
                     plp.lpSum(
                         lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
@@ -402,6 +388,29 @@ class NFL_Optimizer:
                     f"Matchup at least {matchup} {limit}",
                 )
 
+        # Address player vs dst (only applies to QB vs DST)
+        if not self.allow_qb_vs_dst:
+            for team, players in self.players_by_team.items():
+                for qb in players.get("QB", []):
+                    opponent = qb["Opponent"]
+                    opposing_dsts = self.players_by_team.get(opponent, {}).get(
+                        "DST", []
+                    )
+                    for dst in opposing_dsts:
+                        self.problem += (
+                            plp.lpSum(lp_variables[qb["ID"]] + lp_variables[dst["ID"]])
+                            <= 1,
+                            f"No QB vs DST {qb['Name']} vs {dst['Name']}",
+                        )
+
+                # self.problem += (
+                #     plp.lpSum(
+                #         lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                #         for (player, pos_str, team) in players_in_game
+                #     )
+                #     >= int(limit),
+                #     f"Matchup at least {matchup} {limit}",
+                # )
 
         # Address stack rules
         for rule_type in self.stack_rules:
