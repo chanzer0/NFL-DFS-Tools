@@ -96,7 +96,6 @@ class NFL_Optimizer:
                         opponent = teams[0] if teams[0] != team else teams[1]
                     elif self.site == "fd":
                         matchup = row["game"]
-                        teams = matchup.split("@")
                         opponent = row["opponent"]
                     self.player_dict[(player_name, position, team)][
                         "Opponent"
@@ -339,18 +338,23 @@ class NFL_Optimizer:
                 f"Team limit {teamIdent} {limit}",
             )
 
+
         if self.global_team_limit is not None:
-            for limit_team in self.team_list:
-                self.problem += (
-                    plp.lpSum(
-                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                        for (player, pos_str, team) in self.player_dict
-                        if self.player_dict[(player, pos_str, team)]["Team"]
-                        == limit_team
-                    )
-                    <= int(self.global_team_limit),
-                    f"Global team limit {limit_team} {self.global_team_limit}",
+            team_limit = int(self.global_team_limit)
+        else:
+            team_limit = 5 if self.site == "dk" else 4
+            
+        for limit_team in self.team_list:
+            self.problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if self.player_dict[(player, pos_str, team)]["Team"]
+                    == limit_team
                 )
+                <= team_limit,
+                f"Global team limit {limit_team} {team_limit}",
+            )
 
         # Address matchup limits
         if self.matchup_limits is not None:
