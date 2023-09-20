@@ -269,6 +269,8 @@ class NFL_Showdown_Simulator:
             reader = csv.DictReader(self.lower_first(file))
             for row in reader:
                 name_key = "name" if self.site == "dk" else "nickname"
+                if self.site == "fd" and row['position'] == "D":
+                    name_key = "last name"
                 player_name = row[name_key].replace("-", "#").lower().strip()
                 #if qb and dst not in position add flex
                 team_key = "teamabbrev" if self.site == "dk" else "team"
@@ -296,10 +298,14 @@ class NFL_Showdown_Simulator:
                 elif self.site == "fd":
                     for position in ['CPT','FLEX']:
                         if (player_name,position, team) in self.player_dict:
-                            self.player_dict[(player_name,pos_str, team)]["ID"] = str(row["id"])
-                            self.player_dict[(player_name,pos_str, team)]["Team"] =  row[team_key]
-                            self.player_dict[(player_name,pos_str, team)]["Opp"] = team_opp
-                            self.player_dict[(player_name,pos_str, team)]["Matchup"] = opp
+                            if position == 'CPT':
+                                pid = str(row["id"]) + '69696969'
+                            else:
+                                pid = str(row["id"])
+                            self.player_dict[(player_name,position, team)]["ID"] = pid
+                            self.player_dict[(player_name,position, team)]["Team"] =  row[team_key]
+                            self.player_dict[(player_name,position, team)]["Opp"] = team_opp
+                            self.player_dict[(player_name,position, team)]["Matchup"] = opp
                     self.id_name_dict[str(row["id"])] = row[name_key]
                 
                     
@@ -1021,7 +1027,13 @@ class NFL_Showdown_Simulator:
                     fieldFpts_p += player_data.get("fieldFpts", 0)
                     ceil_p += player_data.get("Ceiling", 0)
                     own_p.append(player_data.get("Ownership", 0) / 100)
-                    lu_names.append(f"{player_data.get('Name', '')} ({player_data.get('ID', '')})")
+                    if self.site == "fd" and 'CPT' in player_data['rosterPosition']:
+                        player_id = player_data.get('ID', '')
+                        if player_id.endswith('69696969'):
+                            player_id = player_id.replace('69696969', '')
+                        lu_names.append(f"{player_data.get('Name', '')} ({player_id})")
+                    else:
+                        lu_names.append(f"{player_data.get('Name', '')} ({player_data.get('ID', '')})")
                     if 'DST' not in player_data["Position"]:
                         lu_teams.append(player_data['Team'])
                         if player_data['Team'] in def_opps:
