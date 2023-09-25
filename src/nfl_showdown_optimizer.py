@@ -455,13 +455,17 @@ class NFL_Showdown_Optimizer:
                         self.problem += (
                             plp.lpSum(
                                 [
-                                    lp_variables[self.player_dict[player_tuple]["ID"]]
+                                    lp_variables[
+                                        self.player_dict[player_tuple]["UniqueKey"]
+                                    ]
                                     for player_tuple in stack_players_tuples
                                 ]
                                 + [
                                     -count
                                     * lp_variables[
-                                        self.player_dict[pos_key_player_tuple]["ID"]
+                                        self.player_dict[pos_key_player_tuple][
+                                            "UniqueKey"
+                                        ]
                                     ]
                                 ]
                             )
@@ -527,7 +531,7 @@ class NFL_Showdown_Optimizer:
                                 plp.lpSum(
                                     [
                                         lp_variables[
-                                            self.player_dict[player_tuple]["ID"]
+                                            self.player_dict[player_tuple]["UniqueKey"]
                                         ]
                                         for player_tuple in limit_players_tuples
                                     ]
@@ -605,7 +609,7 @@ class NFL_Showdown_Optimizer:
                                 plp.lpSum(
                                     [
                                         lp_variables[
-                                            self.player_dict[player_tuple]["ID"]
+                                            self.player_dict[player_tuple]["UniqueKey"]
                                         ]
                                         for player_tuple in limit_players_tuples
                                     ]
@@ -613,7 +617,9 @@ class NFL_Showdown_Optimizer:
                                     * plp.lpSum(
                                         [
                                             lp_variables[
-                                                self.player_dict[player_tuple]["ID"]
+                                                self.player_dict[player_tuple][
+                                                    "UniqueKey"
+                                                ]
                                             ]
                                             for player_tuple in unless_players_tuples
                                         ]
