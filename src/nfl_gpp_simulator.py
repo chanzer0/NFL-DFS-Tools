@@ -17,6 +17,7 @@ import re
 from scipy.stats import norm, kendalltau, multivariate_normal, gamma
 import matplotlib.pyplot as plt
 import seaborn as sns
+from collections import Counter
 
 
 class NFL_GPP_Simulator:
@@ -841,6 +842,7 @@ class NFL_GPP_Simulator:
         max_stack_len,
         matchups,
         num_players_in_roster,
+        site,
     ):
         # new random seed for each lineup (without this there is a ton of dupes)
         rng = np.random.default_rng()
@@ -857,6 +859,7 @@ class NFL_GPP_Simulator:
         reasonable_stack_projection = optimal_score - (
             (max_pct_off_optimal * 1.25) * optimal_score
         )
+        max_players_per_team = 4 if site == "fd" else None
         # reject_counters = {
         #     "salary_too_low": 0,
         #     "salary_too_high": 0,
@@ -898,6 +901,7 @@ class NFL_GPP_Simulator:
                         proj += projections[choice_idx]
                         def_opp = opponents[choice_idx][0]
                         lineup_matchups.append(matchups[choice_idx[0]])
+                        player_teams.append(teams[choice_idx][0])
                     if k >= 1:
                         remaining_salary = salary_ceiling - salary
                         if players_opposing_def < overlap_limit:
@@ -950,6 +954,27 @@ class NFL_GPP_Simulator:
                             lineup_matchups.append(matchups[choice_idx[0]])
                             if teams[choice_idx][0] == def_opp:
                                 players_opposing_def += 1
+                            if max_players_per_team is not None:
+                                team_count = Counter(player_teams)
+                                if any(
+                                    count > max_players_per_team
+                                    for count in team_count.values()
+                                ):
+                                    salary = 0
+                                    proj = 0
+                                    if team_stack == "":
+                                        lineup = []
+                                    else:
+                                        lineup = np.zeros(
+                                            shape=pos_matrix.shape[1]
+                                        ).astype(str)
+                                    player_teams = []
+                                    def_opps = []
+                                    players_opposing_def = 0
+                                    lineup_matchups = []
+                                    in_lineup.fill(0)  # Reset the in_lineup array
+                                    k = 0  # Reset the player index
+                                    continue  # Skip to the next iteration of the while loop
                         else:
                             if k == total_players - 1:
                                 valid_players = np.nonzero(
@@ -1000,6 +1025,27 @@ class NFL_GPP_Simulator:
                             lineup_matchups.append(matchups[choice_idx[0]])
                             if teams[choice_idx][0] == def_opp:
                                 players_opposing_def += 1
+                            if max_players_per_team is not None:
+                                team_count = Counter(player_teams)
+                                if any(
+                                    count > max_players_per_team
+                                    for count in team_count.values()
+                                ):
+                                    salary = 0
+                                    proj = 0
+                                    if team_stack == "":
+                                        lineup = []
+                                    else:
+                                        lineup = np.zeros(
+                                            shape=pos_matrix.shape[1]
+                                        ).astype(str)
+                                    player_teams = []
+                                    def_opps = []
+                                    players_opposing_def = 0
+                                    lineup_matchups = []
+                                    in_lineup.fill(0)  # Reset the in_lineup array
+                                    k = 0  # Reset the player index
+                                    continue  # Skip to the next iteration of the while loop
                     k += 1
                 # Must have a reasonable salary
                 # if salary > salary_ceiling:
@@ -1010,26 +1056,55 @@ class NFL_GPP_Simulator:
                     # Must have a reasonable projection (within 60% of optimal) **people make a lot of bad lineups
                     if proj >= reasonable_projection:
                         if len(set(lineup_matchups)) > 1:
-                            if len(set(lineup)) != 9:
-                                print(
-                                    "non stack lineup dupes",
-                                    plyr_stack_indices,
-                                    str(lu_num),
-                                    salaries[plyr_stack_indices],
-                                    lineup,
-                                    stack_len,
-                                    team_stack,
-                                    x,
-                                )
-                            reject = False
-                            lus[lu_num] = {
-                                "Lineup": lineup,
-                                "Wins": 0,
-                                "Top10": 0,
-                                "ROI": 0,
-                                "Cashes": 0,
-                                "Type": "generated_nostack",
-                            }
+                            if max_players_per_team is not None:
+                                team_count = Counter(player_teams)
+                                if all(
+                                    count <= max_players_per_team
+                                    for count in team_count.values()
+                                ):
+                                    reject = False
+                                    lus[lu_num] = {
+                                        "Lineup": lineup,
+                                        "Wins": 0,
+                                        "Top10": 0,
+                                        "ROI": 0,
+                                        "Cashes": 0,
+                                        "Type": "generated_nostack",
+                                    }
+                                    if len(set(lineup)) != 9:
+                                        print(
+                                            "non stack lineup dupes",
+                                            lu_num,
+                                            plyr_stack_indices,
+                                            str(lu_num),
+                                            salaries[plyr_stack_indices],
+                                            lineup,
+                                            stack_len,
+                                            team_stack,
+                                            x,
+                                        )
+                            else:
+                                reject = False
+                                lus[lu_num] = {
+                                    "Lineup": lineup,
+                                    "Wins": 0,
+                                    "Top10": 0,
+                                    "ROI": 0,
+                                    "Cashes": 0,
+                                    "Type": "generated_nostack",
+                                }
+                                if len(set(lineup)) != 9:
+                                    print(
+                                        "stack lineup dupes",
+                                        lu_num,
+                                        plyr_stack_indices,
+                                        str(lu_num),
+                                        salaries[plyr_stack_indices],
+                                        lineup,
+                                        stack_len,
+                                        team_stack,
+                                        x,
+                                    )
                             # complete = 'completed'
                             # print(str(lu_num) + ' ' + complete)
                     #     else:
@@ -1064,6 +1139,7 @@ class NFL_GPP_Simulator:
                 valid_players = np.unique(
                     valid_team[np.nonzero(pos_matrix[valid_team, 4:8] > 0)[0]]
                 )
+                player_teams.append(teams[qb])
                 players_opposing_def = 0
                 plyr_list = ids[valid_players]
                 prob_list = ownership[valid_players]
@@ -1095,6 +1171,7 @@ class NFL_GPP_Simulator:
                             if lineup[l] == "0.0":
                                 lineup[l] = ids[p]
                                 lineup_matchups.append(matchups[p])
+                                player_teams.append(teams[p])
                                 x += 1
                                 player_placed = True
                                 break
@@ -1192,6 +1269,27 @@ class NFL_GPP_Simulator:
                                 proj += projections[choice_idx]
                                 player_teams.append(teams[choice_idx][0])
                                 lineup_matchups.append(matchups[choice_idx[0]])
+                                if max_players_per_team is not None:
+                                    team_count = Counter(player_teams)
+                                    if any(
+                                        count > max_players_per_team
+                                        for count in team_count.values()
+                                    ):
+                                        salary = 0
+                                        proj = 0
+                                        if team_stack == "":
+                                            lineup = []
+                                        else:
+                                            lineup = np.zeros(
+                                                shape=pos_matrix.shape[1]
+                                            ).astype(str)
+                                        player_teams = []
+                                        def_opps = []
+                                        players_opposing_def = 0
+                                        lineup_matchups = []
+                                        in_lineup.fill(0)  # Reset the in_lineup array
+                                        k = 0  # Reset the player index
+                                        continue  # Skip to the next iteration of the while loop
                                 if teams[choice_idx][0] == def_opp:
                                     players_opposing_def += 1
                                 if teams[choice_idx][0] == team_stack:
@@ -1248,6 +1346,27 @@ class NFL_GPP_Simulator:
                                     players_opposing_def += 1
                                 if teams[choice_idx][0] == team_stack:
                                     team_stack_len += 1
+                                if max_players_per_team is not None:
+                                    team_count = Counter(player_teams)
+                                    if any(
+                                        count > max_players_per_team
+                                        for count in team_count.values()
+                                    ):
+                                        salary = 0
+                                        proj = 0
+                                        if team_stack == "":
+                                            lineup = []
+                                        else:
+                                            lineup = np.zeros(
+                                                shape=pos_matrix.shape[1]
+                                            ).astype(str)
+                                        player_teams = []
+                                        def_opps = []
+                                        players_opposing_def = 0
+                                        lineup_matchups = []
+                                        in_lineup.fill(0)  # Reset the in_lineup array
+                                        k = 0  # Reset the player index
+                                        continue  # Skip to the next iteration of the while loop
                             k += 1
                     else:
                         k += 1
@@ -1257,27 +1376,56 @@ class NFL_GPP_Simulator:
                         # loosening reasonable projection constraint for team stacks
                         if proj >= reasonable_stack_projection:
                             if len(set(lineup_matchups)) > 1:
-                                reject = False
-                                lus[lu_num] = {
-                                    "Lineup": lineup,
-                                    "Wins": 0,
-                                    "Top10": 0,
-                                    "ROI": 0,
-                                    "Cashes": 0,
-                                    "Type": "generated_stack",
-                                }
-                                if len(set(lineup)) != 9:
-                                    print(
-                                        "stack lineup dupes",
-                                        lu_num,
-                                        plyr_stack_indices,
-                                        str(lu_num),
-                                        salaries[plyr_stack_indices],
-                                        lineup,
-                                        stack_len,
-                                        team_stack,
-                                        x,
-                                    )
+                                if max_players_per_team is not None:
+                                    team_count = Counter(player_teams)
+                                    if all(
+                                        count <= max_players_per_team
+                                        for count in team_count.values()
+                                    ):
+                                        reject = False
+                                        lus[lu_num] = {
+                                            "Lineup": lineup,
+                                            "Wins": 0,
+                                            "Top10": 0,
+                                            "ROI": 0,
+                                            "Cashes": 0,
+                                            "Type": "generated_stack",
+                                        }
+                                        if len(set(lineup)) != 9:
+                                            print(
+                                                "stack lineup dupes",
+                                                lu_num,
+                                                plyr_stack_indices,
+                                                str(lu_num),
+                                                salaries[plyr_stack_indices],
+                                                lineup,
+                                                stack_len,
+                                                team_stack,
+                                                x,
+                                            )
+
+                                else:
+                                    reject = False
+                                    lus[lu_num] = {
+                                        "Lineup": lineup,
+                                        "Wins": 0,
+                                        "Top10": 0,
+                                        "ROI": 0,
+                                        "Cashes": 0,
+                                        "Type": "generated_stack",
+                                    }
+                                    if len(set(lineup)) != 9:
+                                        print(
+                                            "stack lineup dupes",
+                                            lu_num,
+                                            plyr_stack_indices,
+                                            str(lu_num),
+                                            salaries[plyr_stack_indices],
+                                            lineup,
+                                            stack_len,
+                                            team_stack,
+                                            x,
+                                        )
                 #             else:
                 #                 reject_counters["invalid_matchups"] += 1
                 #         else:
@@ -1400,6 +1548,7 @@ class NFL_GPP_Simulator:
                     max_stack_len,
                     matchups,
                     num_players_in_roster,
+                    self.site,
                 )
                 problems.append(lu_tuple)
             start_time = time.time()
@@ -1705,10 +1854,10 @@ class NFL_GPP_Simulator:
             counter = collections.Counter(lu_teams)
             stacks = counter.most_common()
 
-            # Find the QB team in stacks and set it as primary stack, remove it from stacks
+            # Find the QB team in stacks and set it as primary stack, remove it from stacks and subtract 1 to make sure qb isn't counted
             for s in stacks:
                 if s[0] == qb_tm:
-                    primaryStack = str(qb_tm) + " " + str(s[1])
+                    primaryStack = str(qb_tm) + " " + str((s[1]))
                     stacks.remove(s)
                     break
 
