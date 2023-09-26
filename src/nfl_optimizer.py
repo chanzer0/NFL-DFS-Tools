@@ -373,7 +373,7 @@ class NFL_Optimizer:
                 )
 
         if self.matchup_at_least is not None:
-            for matchup, limit in self.matchup_limits.items():
+            for matchup, limit in self.matchup_at_least.items():
                 players_in_game = []
                 for key, value in self.player_dict.items():
                     if value["Matchup"] == matchup:

@@ -9,7 +9,8 @@ import pulp as plp
 import multiprocessing as mp
 import pandas as pd
 import statistics
-#import fuzzywuzzy
+
+# import fuzzywuzzy
 import itertools
 import collections
 import re
@@ -43,7 +44,7 @@ class NFL_GPP_Simulator:
     max_pct_off_optimal = 0.4
     teams_dict = collections.defaultdict(list)  # Initialize teams_dict
     correlation_rules = {}
-    
+
     def __init__(
         self,
         site,
@@ -56,13 +57,13 @@ class NFL_GPP_Simulator:
         self.use_lineup_input = use_lineup_input
         self.load_config()
         self.load_rules()
-        
+
         projection_path = os.path.join(
             os.path.dirname(__file__),
             "../{}_data/{}".format(site, self.config["projection_path"]),
         )
         self.load_projections(projection_path)
-        
+
         player_path = os.path.join(
             os.path.dirname(__file__),
             "../{}_data/{}".format(site, self.config["player_path"]),
@@ -70,30 +71,50 @@ class NFL_GPP_Simulator:
         self.load_player_ids(player_path)
         self.load_team_stacks()
 
-        #ownership_path = os.path.join(
+        # ownership_path = os.path.join(
         #    os.path.dirname(__file__),
         #    "../{}_data/{}".format(site, self.config["ownership_path"]),
-        #)
-        #self.load_ownership(ownership_path)
+        # )
+        # self.load_ownership(ownership_path)
 
-        #boom_bust_path = os.path.join(
+        # boom_bust_path = os.path.join(
         #    os.path.dirname(__file__),
         #    "../{}_data/{}".format(site, self.config["boom_bust_path"]),
-        #)
-        #self.load_boom_bust(boom_bust_path)
-                
- #       batting_order_path = os.path.join(
- #           os.path.dirname(__file__),
-#            "../{}_data/{}".format(site, self.config["batting_order_path"]),
-#        )                
-#        self.load_batting_order(batting_order_path)
+        # )
+        # self.load_boom_bust(boom_bust_path)
+
+        #       batting_order_path = os.path.join(
+        #           os.path.dirname(__file__),
+        #            "../{}_data/{}".format(site, self.config["batting_order_path"]),
+        #        )
+        #        self.load_batting_order(batting_order_path)
 
         if site == "dk":
-            self.roster_construction = ['QB','RB','RB','WR','WR','WR','TE','FLEX','DST']
+            self.roster_construction = [
+                "QB",
+                "RB",
+                "RB",
+                "WR",
+                "WR",
+                "WR",
+                "TE",
+                "FLEX",
+                "DST",
+            ]
             self.salary = 50000
-        
+
         elif site == "fd":
-            self.roster_construction = ['QB','RB','RB','WR','WR','WR','TE','FLEX','DST']
+            self.roster_construction = [
+                "QB",
+                "RB",
+                "RB",
+                "WR",
+                "WR",
+                "WR",
+                "TE",
+                "FLEX",
+                "DST",
+            ]
             self.salary = 60000
 
         self.use_contest_data = use_contest_data
@@ -108,18 +129,18 @@ class NFL_GPP_Simulator:
             self.field_size = int(field_size)
             self.payout_structure = {0: 0.0}
             self.entry_fee = 0
-        
-        #self.adjust_default_stdev()
+
+        # self.adjust_default_stdev()
         self.assertPlayerDict()
         self.num_iterations = int(num_iterations)
         self.get_optimal()
         if self.use_lineup_input:
             self.load_lineups_from_file()
-        #if self.match_lineup_input_to_field_size or len(self.field_lineups) == 0:
-        #self.generate_field_lineups()
+        # if self.match_lineup_input_to_field_size or len(self.field_lineups) == 0:
+        # self.generate_field_lineups()
         self.load_correlation_rules()
-    
-    #make column lookups on datafiles case insensitive
+
+    # make column lookups on datafiles case insensitive
     def lower_first(self, iterator):
         return itertools.chain([next(iterator).lower()], iterator)
 
@@ -128,96 +149,233 @@ class NFL_GPP_Simulator:
         self.randomness_amount = float(self.config["randomness"])
         self.min_lineup_salary = int(self.config["min_lineup_salary"])
         self.max_pct_off_optimal = float(self.config["max_pct_off_optimal"])
-        self.pct_field_using_stacks = float(self.config['pct_field_using_stacks'])
-        self.default_qb_var = float(self.config['default_qb_var'])
-        self.default_skillpos_var = float(self.config['default_skillpos_var'])
-        self.default_def_var = float(self.config['default_def_var'])
-        self.overlap_limit = float(self.config['num_players_vs_def'])
-        self.pct_field_double_stacks = float(self.config['pct_field_double_stacks'])
+        self.pct_field_using_stacks = float(self.config["pct_field_using_stacks"])
+        self.default_qb_var = float(self.config["default_qb_var"])
+        self.default_skillpos_var = float(self.config["default_skillpos_var"])
+        self.default_def_var = float(self.config["default_def_var"])
+        self.overlap_limit = float(self.config["num_players_vs_def"])
+        self.pct_field_double_stacks = float(self.config["pct_field_double_stacks"])
         self.correlation_rules = self.config["custom_correlations"]
-    
+
     def assertPlayerDict(self):
         for p, s in list(self.player_dict.items()):
-            if s["ID"] == 0 or s['ID'] == '' or s['ID'] is None:
-                print(s['Name'] + ' name mismatch between projections and player ids, excluding from player_dict')
+            if s["ID"] == 0 or s["ID"] == "" or s["ID"] is None:
+                print(
+                    s["Name"]
+                    + " name mismatch between projections and player ids, excluding from player_dict"
+                )
                 self.player_dict.pop(p)
-        
+
     # In order to make reasonable tournament lineups, we want to be close enough to the optimal that
     # a person could realistically land on this lineup. Skeleton here is taken from base `mlb_optimizer.py`
     def get_optimal(self):
-            #print(s['Name'],s['ID'])
-        #print(self.player_dict)
-        problem = plp.LpProblem('NFL', plp.LpMaximize)
-        lp_variables = {self.player_dict[(player, pos_str, team)]['ID']: plp.LpVariable(
-            str(self.player_dict[(player, pos_str, team)]['ID']), cat='Binary') for (player, pos_str, team) in self.player_dict}
-        
+        # print(s['Name'],s['ID'])
+        # print(self.player_dict)
+        problem = plp.LpProblem("NFL", plp.LpMaximize)
+        lp_variables = {
+            self.player_dict[(player, pos_str, team)]["ID"]: plp.LpVariable(
+                str(self.player_dict[(player, pos_str, team)]["ID"]), cat="Binary"
+            )
+            for (player, pos_str, team) in self.player_dict
+        }
+
         # set the objective - maximize fpts
-        problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['fieldFpts'] * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                             for (player, pos_str, team) in self.player_dict), 'Objective'
+        problem += (
+            plp.lpSum(
+                self.player_dict[(player, pos_str, team)]["fieldFpts"]
+                * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                for (player, pos_str, team) in self.player_dict
+            ),
+            "Objective",
+        )
 
         # Set the salary constraints
-        problem += plp.lpSum(self.player_dict[(player, pos_str, team)]['Salary'] * lp_variables[self.player_dict[(player, pos_str, team)]['ID']]
-                             for (player, pos_str, team) in self.player_dict) <= self.salary
+        problem += (
+            plp.lpSum(
+                self.player_dict[(player, pos_str, team)]["Salary"]
+                * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                for (player, pos_str, team) in self.player_dict
+            )
+            <= self.salary
+        )
 
-        if self.site == 'dk':
+        if self.site == "dk":
             # Need 1 quarterback
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'QB' in self.player_dict[(player, pos_str, team)]['Position']) == 1
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "QB" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                == 1
+            )
             # Need at least 2 RBs can have up to 3 with FLEX slot
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'RB' in self.player_dict[(player, pos_str, team)]['Position']) >= 2
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'RB' in self.player_dict[(player, pos_str, team)]['Position']) <= 3
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "RB" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                >= 2
+            )
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "RB" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                <= 3
+            )
             # Need at least 3 WRs can have up to 4 with FLEX slot
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'WR' in self.player_dict[(player, pos_str, team)]['Position']) >= 3
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'WR' in self.player_dict[(player, pos_str, team)]['Position']) <= 4
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "WR" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                >= 3
+            )
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "WR" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                <= 4
+            )
             # Need at least 1 TE
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'TE' in self.player_dict[(player, pos_str, team)]['Position']) >= 1
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'TE' in self.player_dict[(player, pos_str, team)]['Position']) <= 2
-            # Need 1 DEF 
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if 'DST' in self.player_dict[(player, pos_str, team)]['Position']) == 1
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "TE" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                >= 1
+            )
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "TE" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                <= 2
+            )
+            # Need 1 DEF
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "DST" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                == 1
+            )
             # Can only roster 9 total players
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict) == 9
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                )
+                == 9
+            )
             # Max 8 per team in case of weird issues with stacking on short slates
             for team in self.team_list:
-                problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= 8
-        
-        elif self.site == 'fd':
+                problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in self.player_dict
+                        if self.player_dict[(player, pos_str, team)]["Team"] == team
+                    )
+                    <= 8
+                )
+
+        elif self.site == "fd":
             # Need at least 1 point guard, can have up to 3 if utilizing G and UTIL slots
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'QB' in self.player_dict[(player, pos_str, team)]['Position']) == 1
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "QB" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                == 1
+            )
             # Need at least 2 RBs can have up to 3 with FLEX slot
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'RB' in self.player_dict[(player, pos_str, team)]['Position']) >= 2
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'RB' in self.player_dict[(player, pos_str, team)]['Position']) <= 3
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "RB" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                >= 2
+            )
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "RB" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                <= 3
+            )
             # Need at least 3 WRs can have up to 4 with FLEX slot
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'WR' in self.player_dict[(player, pos_str, team)]['Position']) >= 3
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'WR' in self.player_dict[(player, pos_str, team)]['Position']) <= 4
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "WR" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                >= 3
+            )
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "WR" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                <= 4
+            )
             # Need at least 1 TE
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'TE' in self.player_dict[(player, pos_str, team)]['Position']) >= 1
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'TE' in self.player_dict[(player, pos_str, team)]['Position']) <= 2
-            # Need 1 DEF 
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict  if 'DST' in self.player_dict[(player, pos_str, team)]['Position']) == 1
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "TE" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                >= 1
+            )
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "TE" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                <= 2
+            )
+            # Need 1 DEF
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                    if "DST" in self.player_dict[(player, pos_str, team)]["Position"]
+                )
+                == 1
+            )
             # Can only roster 9 total players
-            problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                 for (player, pos_str, team) in self.player_dict ) == 9
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                    for (player, pos_str, team) in self.player_dict
+                )
+                == 9
+            )
             # Max 4 per team
             for team in self.team_list:
-                problem += plp.lpSum(lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                                     for (player, pos_str, team) in self.player_dict if self.player_dict[(player, pos_str, team)]['Team'] == team) <= 4
+                problem += (
+                    plp.lpSum(
+                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                        for (player, pos_str, team) in self.player_dict
+                        if self.player_dict[(player, pos_str, team)]["Team"] == team
+                    )
+                    <= 4
+                )
 
         # print(f"Problem Name: {problem.name}")
         # print(f"Sense: {problem.sense}")
@@ -254,26 +412,33 @@ class NFL_GPP_Simulator:
         #         print(f"{v.name}: LowBound={v.lowBound}, UpBound={v.upBound}, Cat={v.cat}")
         # except Exception as e:
         #     print(f"Error while printing variable: {e}")
-    # Crunch!
+        # Crunch!
         try:
             problem.solve(plp.PULP_CBC_CMD(msg=0))
         except plp.PulpSolverError:
-            print('Infeasibility reached - only generated {} lineups out of {}. Continuing with export.'.format(
-                len(self.num_lineups), self.num_lineups))
+            print(
+                "Infeasibility reached - only generated {} lineups out of {}. Continuing with export.".format(
+                    len(self.num_lineups), self.num_lineups
+                )
+            )
         except TypeError:
-            for p,s in self.player_dict.items():
-                if s["ID"]==0:
-                    print(s["Name"] + ' name mismatch between projections and player ids')
-                if s['ID'] == '':
-                    print(s['Name'] + ' name mismatch between projections and player ids')
-                if s['ID'] is None:
-                    print(s['Name'])
+            for p, s in self.player_dict.items():
+                if s["ID"] == 0:
+                    print(
+                        s["Name"] + " name mismatch between projections and player ids"
+                    )
+                if s["ID"] == "":
+                    print(
+                        s["Name"] + " name mismatch between projections and player ids"
+                    )
+                if s["ID"] is None:
+                    print(s["Name"])
         score = str(problem.objective)
         for v in problem.variables():
             score = score.replace(v.name, str(v.varValue))
 
         self.optimal_score = eval(score)
-        
+
     # Load player IDs for exporting
     def load_player_ids(self, path):
         with open(path, encoding="utf-8-sig") as file:
@@ -282,36 +447,39 @@ class NFL_GPP_Simulator:
                 name_key = "name" if self.site == "dk" else "nickname"
                 player_name = row[name_key].replace("-", "#").lower().strip()
                 # some players have 2 positions - will be listed like 'PG/SF' or 'PF/C'
-                position = [pos for pos in row['position'].split('/')]
+                position = [pos for pos in row["position"].split("/")]
                 position.sort()
-                if self.site == 'fd':
-                    if 'D' in position:
-                        position = ['DST']
-                #if qb and dst not in position add flex
-                if 'QB' not in position and 'DST' not in position:
-                    position.append('FLEX')
+                if self.site == "fd":
+                    if "D" in position:
+                        position = ["DST"]
+                # if qb and dst not in position add flex
+                if "QB" not in position and "DST" not in position:
+                    position.append("FLEX")
                 team_key = "teamabbrev" if self.site == "dk" else "team"
                 team = row[team_key]
                 game_info = "game info" if self.site == "dk" else "game"
-                match = re.search(pattern='(\w{2,4}@\w{2,4})', string=row[game_info])
+                match = re.search(pattern="(\w{2,4}@\w{2,4})", string=row[game_info])
                 if match:
-                    opp = match.groups()[0].split('@')
+                    opp = match.groups()[0].split("@")
                     self.matchups.add((opp[0], opp[1]))
                     for m in opp:
                         if m != team:
                             team_opp = m
                     opp = tuple(opp)
-                #if not opp:
+                # if not opp:
                 #    print(row)
                 pos_str = str(position)
-                if (player_name,pos_str, team) in self.player_dict:
-                    self.player_dict[(player_name,pos_str, team)]["ID"] = str(row["id"])
-                    self.player_dict[(player_name,pos_str, team)]["Team"] =  row[team_key]
-                    self.player_dict[(player_name,pos_str, team)]["Opp"] = team_opp
-                    self.player_dict[(player_name,pos_str, team)]["Matchup"] = opp
+                if (player_name, pos_str, team) in self.player_dict:
+                    self.player_dict[(player_name, pos_str, team)]["ID"] = str(
+                        row["id"]
+                    )
+                    self.player_dict[(player_name, pos_str, team)]["Team"] = row[
+                        team_key
+                    ]
+                    self.player_dict[(player_name, pos_str, team)]["Opp"] = team_opp
+                    self.player_dict[(player_name, pos_str, team)]["Matchup"] = opp
                 self.id_name_dict[str(row["id"])] = row[name_key]
-                
-                    
+
     def load_contest_data(self, path):
         with open(path, encoding="utf-8-sig") as file:
             reader = csv.DictReader(self.lower_first(file))
@@ -341,15 +509,20 @@ class NFL_GPP_Simulator:
                         row["payout"].split(".")[0].replace(",", "")
                     )
         # print(self.payout_structure)
-    
+
     def load_correlation_rules(self):
-        if len(self.correlation_rules.keys())>0:
+        if len(self.correlation_rules.keys()) > 0:
             for c in self.correlation_rules.keys():
                 for k in self.player_dict:
-                    if c.replace("-", "#").lower().strip() in self.player_dict[k].values():
+                    if (
+                        c.replace("-", "#").lower().strip()
+                        in self.player_dict[k].values()
+                    ):
                         for v in self.correlation_rules[c].keys():
-                            self.player_dict[k]['Correlations'][v] = self.correlation_rules[c][v]
-                            
+                            self.player_dict[k]["Correlations"][
+                                v
+                            ] = self.correlation_rules[c][v]
+
     # Load config from file
     def load_config(self):
         with open(
@@ -369,107 +542,173 @@ class NFL_GPP_Simulator:
                     fpts = float(row["fpts"])
                 except:
                     fpts = 0
-                    print('unable to load player fpts: ' + player_name + ', fpts:' + row['fpts'])
-                if 'fieldfpts' in row:
-                    if row['fieldfpts'] == '':
+                    print(
+                        "unable to load player fpts: "
+                        + player_name
+                        + ", fpts:"
+                        + row["fpts"]
+                    )
+                if "fieldfpts" in row:
+                    if row["fieldfpts"] == "":
                         fieldFpts = fpts
                     else:
-                        fieldFpts = float(row['fieldfpts'])
+                        fieldFpts = float(row["fieldfpts"])
                 else:
                     fieldFpts = fpts
-                position = [pos for pos in row['position'].split('/')]
+                position = [pos for pos in row["position"].split("/")]
                 position.sort()
-                #if qb and dst not in position add flex
-                if self.site == 'fd':
-                    if 'D' in position:
-                        position = ['DST']
-                if 'QB' not in position and 'DST' not in position:
-                    position.append('FLEX')
+                # if qb and dst not in position add flex
+                if self.site == "fd":
+                    if "D" in position:
+                        position = ["DST"]
+                if "QB" not in position and "DST" not in position:
+                    position.append("FLEX")
                 pos = position[0]
-                if 'stddev' in row:
-                    if row['stddev'] == '' or float(row['stddev']) == 0:
-                        if position == 'QB':
-                            stddev = fpts* self.default_qb_var
-                        elif position == 'DST':
-                            stddev = fpts* self.default_def_var
+                if "stddev" in row:
+                    if row["stddev"] == "" or float(row["stddev"]) == 0:
+                        if position == "QB":
+                            stddev = fpts * self.default_qb_var
+                        elif position == "DST":
+                            stddev = fpts * self.default_def_var
                         else:
-                            stddev = fpts*self.default_skillpos_var
+                            stddev = fpts * self.default_skillpos_var
                     else:
                         stddev = float(row["stddev"])
                 else:
-                    if position == 'QB':
-                        stddev = fpts* self.default_qb_var
-                    elif position == 'DST':
-                        stddev = fpts* self.default_def_var
+                    if position == "QB":
+                        stddev = fpts * self.default_qb_var
+                    elif position == "DST":
+                        stddev = fpts * self.default_def_var
                     else:
-                        stddev = fpts*self.default_skillpos_var
-                #check if ceiling exists in row columns
-                if 'ceiling' in row:
-                    if row['ceiling'] == '' or float(row['ceiling'])==0:
-                        ceil = fpts+stddev
+                        stddev = fpts * self.default_skillpos_var
+                # check if ceiling exists in row columns
+                if "ceiling" in row:
+                    if row["ceiling"] == "" or float(row["ceiling"]) == 0:
+                        ceil = fpts + stddev
                     else:
-                        ceil = float(row['ceiling'])
+                        ceil = float(row["ceiling"])
                 else:
-                    ceil = fpts+stddev
-                if row['salary']:
-                    sal = int(row['salary'].replace(",", ""))
-                if pos == 'QB':
-                    corr = {'QB': 1, 'RB': 0.08, 'WR': 0.62, 'TE': 0.32, 'DST' : -0.09, 'Opp QB': 0.24, 'Opp RB' : 0.04, 'Opp WR': 0.19, 'Opp TE' : 0.1, 'Opp DST': -0.41}
-                elif pos == 'RB':
-                    corr = {'QB': 0.08, 'RB': 1, 'WR': -0.09, 'TE': -0.02, 'DST' : 0.07, 'Opp QB': 0.04, 'Opp RB' : -0.08, 'Opp WR': 0.01, 'Opp TE' : 0.03, 'Opp DST': -0.33}
-                elif pos == 'WR':
-                    corr = {'QB': 0.62, 'RB': -0.09, 'WR': 1, 'TE': -0.07, 'DST' : -0.08, 'Opp QB': 0.19, 'Opp RB' : 0.01, 'Opp WR': 0.16, 'Opp TE' : 0.08, 'Opp DST': -0.22}
-                elif pos == 'TE':
-                    corr = {'QB': 0.32, 'RB': -0.02, 'WR': -0.07, 'TE': 1, 'DST' : -0.08, 'Opp QB': 0.1, 'Opp RB' : 0.03, 'Opp WR': 0.08, 'Opp TE' : 0, 'Opp DST': -0.14}
-                elif pos == 'DST':
-                    corr = {'QB': -0.09, 'RB': 0.07, 'WR': -0.08, 'TE': -0.08, 'DST' : 1, 'Opp QB': -0.41, 'Opp RB' : -0.33, 'Opp WR': -0.22, 'Opp TE' : -0.14, 'Opp DST': -0.27}
-                team = row['team']
-                if team == 'LA':
-                    team = 'LAR'
-                if self.site == 'fd':
-                    if team == 'JAX':
-                        team = 'JAC'
-                own = float(row['own%'].replace('%','')) 
+                    ceil = fpts + stddev
+                if row["salary"]:
+                    sal = int(row["salary"].replace(",", ""))
+                if pos == "QB":
+                    corr = {
+                        "QB": 1,
+                        "RB": 0.08,
+                        "WR": 0.62,
+                        "TE": 0.32,
+                        "DST": -0.09,
+                        "Opp QB": 0.24,
+                        "Opp RB": 0.04,
+                        "Opp WR": 0.19,
+                        "Opp TE": 0.1,
+                        "Opp DST": -0.41,
+                    }
+                elif pos == "RB":
+                    corr = {
+                        "QB": 0.08,
+                        "RB": 1,
+                        "WR": -0.09,
+                        "TE": -0.02,
+                        "DST": 0.07,
+                        "Opp QB": 0.04,
+                        "Opp RB": -0.08,
+                        "Opp WR": 0.01,
+                        "Opp TE": 0.03,
+                        "Opp DST": -0.33,
+                    }
+                elif pos == "WR":
+                    corr = {
+                        "QB": 0.62,
+                        "RB": -0.09,
+                        "WR": 1,
+                        "TE": -0.07,
+                        "DST": -0.08,
+                        "Opp QB": 0.19,
+                        "Opp RB": 0.01,
+                        "Opp WR": 0.16,
+                        "Opp TE": 0.08,
+                        "Opp DST": -0.22,
+                    }
+                elif pos == "TE":
+                    corr = {
+                        "QB": 0.32,
+                        "RB": -0.02,
+                        "WR": -0.07,
+                        "TE": 1,
+                        "DST": -0.08,
+                        "Opp QB": 0.1,
+                        "Opp RB": 0.03,
+                        "Opp WR": 0.08,
+                        "Opp TE": 0,
+                        "Opp DST": -0.14,
+                    }
+                elif pos == "DST":
+                    corr = {
+                        "QB": -0.09,
+                        "RB": 0.07,
+                        "WR": -0.08,
+                        "TE": -0.08,
+                        "DST": 1,
+                        "Opp QB": -0.41,
+                        "Opp RB": -0.33,
+                        "Opp WR": -0.22,
+                        "Opp TE": -0.14,
+                        "Opp DST": -0.27,
+                    }
+                team = row["team"]
+                if team == "LA":
+                    team = "LAR"
+                if self.site == "fd":
+                    if team == "JAX":
+                        team = "JAC"
+                own = float(row["own%"].replace("%", ""))
                 if own == 0:
                     own = 0.1
                 pos_str = str(position)
                 player_data = {
                     "Fpts": fpts,
-                    "fieldFpts" : fieldFpts,
+                    "fieldFpts": fieldFpts,
                     "Position": position,
-                    "Name" : player_name,
-                    "Team" : team,
-                    "Opp" : '',
-                    "ID": '',
+                    "Name": player_name,
+                    "Team": team,
+                    "Opp": "",
+                    "ID": "",
                     "Salary": int(row["salary"].replace(",", "")),
                     "StdDev": stddev,
                     "Ceiling": ceil,
                     "Ownership": own,
-                    "Correlations" : corr,
-                    "In Lineup": False
+                    "Correlations": corr,
+                    "In Lineup": False,
                 }
-                
+
                 # Check if player is in player_dict and get Opp, ID, Opp Pitcher ID and Opp Pitcher Name
                 if (player_name, pos_str, team) in self.player_dict:
-                    player_data["Opp"] = self.player_dict[(player_name, pos_str, team)].get("Opp", '')
-                    player_data["ID"] = self.player_dict[(player_name, pos_str, team)].get("ID", '')
+                    player_data["Opp"] = self.player_dict[
+                        (player_name, pos_str, team)
+                    ].get("Opp", "")
+                    player_data["ID"] = self.player_dict[
+                        (player_name, pos_str, team)
+                    ].get("ID", "")
 
-                self.player_dict[(player_name, pos_str,team)] = player_data
-                self.teams_dict[team].append(player_data)  # Add player data to their respective team
+                self.player_dict[(player_name, pos_str, team)] = player_data
+                self.teams_dict[team].append(
+                    player_data
+                )  # Add player data to their respective team
 
     def load_team_stacks(self):
         # Initialize a dictionary to hold QB ownership by team
         qb_ownership_by_team = {}
-        
+
         for p in self.player_dict:
             # Check if player is a QB
-            if 'QB' in self.player_dict[p]['Position']:
+            if "QB" in self.player_dict[p]["Position"]:
                 # Fetch the team of the QB
-                team = self.player_dict[p]['Team']
-                
+                team = self.player_dict[p]["Team"]
+
                 # Convert the ownership percentage string to a float and divide by 100
                 own_percentage = float(self.player_dict[p]["Ownership"]) / 100
-                
+
                 # Add the ownership to the accumulated ownership for the team
                 if team in qb_ownership_by_team:
                     qb_ownership_by_team[team] += own_percentage
@@ -480,12 +719,12 @@ class NFL_GPP_Simulator:
         for team, own_percentage in qb_ownership_by_team.items():
             self.stacks_dict[team] = own_percentage
 
-    def extract_id(self,cell_value):
+    def extract_id(self, cell_value):
         if "(" in cell_value and ")" in cell_value:
             return cell_value.split("(")[1].replace(")", "")
         else:
             return cell_value
-       
+
     def load_lineups_from_file(self):
         print("loading lineups")
         i = 0
@@ -501,13 +740,13 @@ class NFL_GPP_Simulator:
                 # print(row)
                 if i == self.field_size:
                     break
-                lineup = [self.extract_id(str(row[j])) for j in range(9)]                      
+                lineup = [self.extract_id(str(row[j])) for j in range(9)]
                 # storing if this lineup was made by an optimizer or with the generation process in this script
                 error = False
                 for l in lineup:
-                    ids = [self.player_dict[k]['ID'] for k in self.player_dict]
+                    ids = [self.player_dict[k]["ID"] for k in self.player_dict]
                     if l not in ids:
-                        print("lineup {} is missing players {}".format(i,l))
+                        print("lineup {} is missing players {}".format(i, l))
                         if l in self.id_name_dict:
                             print(self.id_name_dict[l])
                         error = True
@@ -517,9 +756,9 @@ class NFL_GPP_Simulator:
                 # storing if this lineup was made by an optimizer or with the generation process in this script
                 error = False
                 for l in lineup:
-                    ids = [self.player_dict[k]['ID'] for k in self.player_dict]
+                    ids = [self.player_dict[k]["ID"] for k in self.player_dict]
                     if l not in ids:
-                        print("lineup {} is missing players {}".format(i,l))
+                        print("lineup {} is missing players {}".format(i, l))
                         if l in self.id_name_dict:
                             print(self.id_name_dict[l])
                         error = True
@@ -527,13 +766,32 @@ class NFL_GPP_Simulator:
                     print("lineup {} is missing players".format(i))
                     continue
                 if not error:
-                    #reshuffle lineup to match temp_roster_construction
-                    temp_roster_construction = ['DST', 'QB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX']
+                    # reshuffle lineup to match temp_roster_construction
+                    temp_roster_construction = [
+                        "DST",
+                        "QB",
+                        "RB",
+                        "RB",
+                        "WR",
+                        "WR",
+                        "WR",
+                        "TE",
+                        "FLEX",
+                    ]
                     shuffled_lu = []
 
-                    id_to_player_dict = {v["ID"]: v for k, v in self.player_dict.items()}
+                    id_to_player_dict = {
+                        v["ID"]: v for k, v in self.player_dict.items()
+                    }
                     lineup_copy = lineup.copy()
-                    position_counts = {'DST': 0, 'QB': 0, 'RB': 0, 'WR': 0, 'TE': 0, 'FLEX': 0}
+                    position_counts = {
+                        "DST": 0,
+                        "QB": 0,
+                        "RB": 0,
+                        "WR": 0,
+                        "TE": 0,
+                        "FLEX": 0,
+                    }
                     z = 0
 
                     while z < 9:
@@ -541,7 +799,7 @@ class NFL_GPP_Simulator:
                             if position_counts[t] < temp_roster_construction.count(t):
                                 for l in lineup_copy:
                                     player_info = id_to_player_dict.get(l)
-                                    if player_info and t in player_info['Position']:
+                                    if player_info and t in player_info["Position"]:
                                         shuffled_lu.append(l)
                                         lineup_copy.remove(l)
                                         position_counts[t] += 1
@@ -560,7 +818,7 @@ class NFL_GPP_Simulator:
                     }
                     j += 1
         print("loaded {} lineups".format(j))
-        #print(self.field_lineups)
+        # print(self.field_lineups)
 
     @staticmethod
     def generate_lineups(
@@ -582,7 +840,7 @@ class NFL_GPP_Simulator:
         overlap_limit,
         max_stack_len,
         matchups,
-        num_players_in_roster
+        num_players_in_roster,
     ):
         # new random seed for each lineup (without this there is a ton of dupes)
         rng = np.random.default_rng()
@@ -593,14 +851,12 @@ class NFL_GPP_Simulator:
         reject = True
         iteration_count = 0
         total_players = num_players_in_roster
-        issue = ''
-        complete = ''
-        reasonable_projection = optimal_score - (
-                max_pct_off_optimal * optimal_score
-            )
+        issue = ""
+        complete = ""
+        reasonable_projection = optimal_score - (max_pct_off_optimal * optimal_score)
         reasonable_stack_projection = optimal_score - (
-                (max_pct_off_optimal*1.25) * optimal_score
-            )
+            (max_pct_off_optimal * 1.25) * optimal_score
+        )
         # reject_counters = {
         #     "salary_too_low": 0,
         #     "salary_too_high": 0,
@@ -608,10 +864,10 @@ class NFL_GPP_Simulator:
         #     "invalid_matchups": 0,
         #     "stack_length_insufficient": 0,
         # }
-        #print(lu_num, ' started',  team_stack, max_stack_len)
+        # print(lu_num, ' started',  team_stack, max_stack_len)
         while reject:
             iteration_count += 1
-            if team_stack == '':
+            if team_stack == "":
                 salary = 0
                 proj = 0
                 if sum(in_lineup) != 0:
@@ -621,10 +877,10 @@ class NFL_GPP_Simulator:
                 def_opps = []
                 players_opposing_def = 0
                 lineup_matchups = []
-                k=0
+                k = 0
                 for pos in pos_matrix.T:
-                    if k <1:
-                    # check for players eligible for the position and make sure they arent in a lineup, returns a list of indices of available player
+                    if k < 1:
+                        # check for players eligible for the position and make sure they arent in a lineup, returns a list of indices of available player
                         valid_players = np.nonzero((pos > 0) & (in_lineup == 0))[0]
                         # grab names of players eligible
                         plyr_list = ids[valid_players]
@@ -642,13 +898,22 @@ class NFL_GPP_Simulator:
                         proj += projections[choice_idx]
                         def_opp = opponents[choice_idx][0]
                         lineup_matchups.append(matchups[choice_idx[0]])
-                    if k >=1:
+                    if k >= 1:
                         remaining_salary = salary_ceiling - salary
                         if players_opposing_def < overlap_limit:
-                            if k == total_players-1:
-                                valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary) & (salary + salaries >= salary_floor))[0]
+                            if k == total_players - 1:
+                                valid_players = np.nonzero(
+                                    (pos > 0)
+                                    & (in_lineup == 0)
+                                    & (salaries <= remaining_salary)
+                                    & (salary + salaries >= salary_floor)
+                                )[0]
                             else:
-                                valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary))[0]
+                                valid_players = np.nonzero(
+                                    (pos > 0)
+                                    & (in_lineup == 0)
+                                    & (salaries <= remaining_salary)
+                                )[0]
                             # grab names of players eligible
                             plyr_list = ids[valid_players]
                             # create np array of probability of being seelcted based on ownership and who is eligible at the position
@@ -663,10 +928,12 @@ class NFL_GPP_Simulator:
                                 #     reject_counters["salary_too_low"]
                                 salary = 0
                                 proj = 0
-                                if team_stack == '':
+                                if team_stack == "":
                                     lineup = []
-                                else: 
-                                    lineup = np.zeros(shape=pos_matrix.shape[1]).astype(str)
+                                else:
+                                    lineup = np.zeros(shape=pos_matrix.shape[1]).astype(
+                                        str
+                                    )
                                 player_teams = []
                                 def_opps = []
                                 players_opposing_def = 0
@@ -684,10 +951,19 @@ class NFL_GPP_Simulator:
                             if teams[choice_idx][0] == def_opp:
                                 players_opposing_def += 1
                         else:
-                            if k == total_players-1:
-                                valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary) & (salary + salaries >= salary_floor))[0]
+                            if k == total_players - 1:
+                                valid_players = np.nonzero(
+                                    (pos > 0)
+                                    & (in_lineup == 0)
+                                    & (salaries <= remaining_salary)
+                                    & (salary + salaries >= salary_floor)
+                                )[0]
                             else:
-                                valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary))[0]
+                                valid_players = np.nonzero(
+                                    (pos > 0)
+                                    & (in_lineup == 0)
+                                    & (salaries <= remaining_salary)
+                                )[0]
                             # grab names of players eligible
                             plyr_list = ids[valid_players]
                             # create np array of probability of being seelcted based on ownership and who is eligible at the position
@@ -698,10 +974,12 @@ class NFL_GPP_Simulator:
                             except:
                                 salary = 0
                                 proj = 0
-                                if team_stack == '':
+                                if team_stack == "":
                                     lineup = []
-                                else: 
-                                    lineup = np.zeros(shape=pos_matrix.shape[1]).astype(str)
+                                else:
+                                    lineup = np.zeros(shape=pos_matrix.shape[1]).astype(
+                                        str
+                                    )
                                 player_teams = []
                                 def_opps = []
                                 players_opposing_def = 0
@@ -718,11 +996,11 @@ class NFL_GPP_Simulator:
                             in_lineup[choice_idx] = 1
                             salary += salaries[choice_idx]
                             proj += projections[choice_idx]
-                            player_teams.append(teams[choice_idx][0]) 
+                            player_teams.append(teams[choice_idx][0])
                             lineup_matchups.append(matchups[choice_idx[0]])
                             if teams[choice_idx][0] == def_opp:
                                 players_opposing_def += 1
-                    k +=1 
+                    k += 1
                 # Must have a reasonable salary
                 # if salary > salary_ceiling:
                 #     reject_counters["salary_too_high"] += 1
@@ -731,9 +1009,18 @@ class NFL_GPP_Simulator:
                 if salary >= salary_floor and salary <= salary_ceiling:
                     # Must have a reasonable projection (within 60% of optimal) **people make a lot of bad lineups
                     if proj >= reasonable_projection:
-                        if len(set(lineup_matchups))> 1:
+                        if len(set(lineup_matchups)) > 1:
                             if len(set(lineup)) != 9:
-                                print('non stack lineup dupes', plyr_stack_indices, str(lu_num), salaries[plyr_stack_indices], lineup, stack_len, team_stack, x)
+                                print(
+                                    "non stack lineup dupes",
+                                    plyr_stack_indices,
+                                    str(lu_num),
+                                    salaries[plyr_stack_indices],
+                                    lineup,
+                                    stack_len,
+                                    team_stack,
+                                    x,
+                                )
                             reject = False
                             lus[lu_num] = {
                                 "Lineup": lineup,
@@ -743,8 +1030,8 @@ class NFL_GPP_Simulator:
                                 "Cashes": 0,
                                 "Type": "generated_nostack",
                             }
-                            #complete = 'completed'
-                            #print(str(lu_num) + ' ' + complete)
+                            # complete = 'completed'
+                            # print(str(lu_num) + ' ' + complete)
                     #     else:
                     #         reject_counters["invalid_matchups"] += 1
                     # else:
@@ -759,12 +1046,14 @@ class NFL_GPP_Simulator:
                 lineup_matchups = []
                 filled_pos = np.zeros(shape=pos_matrix.shape[1])
                 team_stack_len = 0
-                k=0
+                k = 0
                 stack = True
                 lineup = np.zeros(shape=pos_matrix.shape[1]).astype(str)
                 valid_team = np.nonzero(teams == team_stack)[0]
-                # select qb 
-                qb = np.unique(valid_team[np.nonzero(pos_matrix[valid_team,1]>0)[0]])[0]
+                # select qb
+                qb = np.unique(
+                    valid_team[np.nonzero(pos_matrix[valid_team, 1] > 0)[0]]
+                )[0]
                 salary += salaries[qb]
                 proj += projections[qb]
                 # print(salary)
@@ -772,57 +1061,72 @@ class NFL_GPP_Simulator:
                 lineup[1] = ids[qb]
                 in_lineup[qb] = 1
                 lineup_matchups.append(matchups[qb])
-                valid_players = np.unique(valid_team[np.nonzero(pos_matrix[valid_team,4:8]>0)[0]])
+                valid_players = np.unique(
+                    valid_team[np.nonzero(pos_matrix[valid_team, 4:8] > 0)[0]]
+                )
                 players_opposing_def = 0
                 plyr_list = ids[valid_players]
                 prob_list = ownership[valid_players]
                 prob_list = prob_list / prob_list.sum()
-                while stack: 
+                while stack:
                     try:
-                        choices = rng.choice(a=plyr_list, p=prob_list, size=stack_len, replace=False)
+                        choices = rng.choice(
+                            a=plyr_list, p=prob_list, size=stack_len, replace=False
+                        )
                         if len(set(choices)) != len(choices):
-                            print('choice dupe', plyr_stack_indices, str(lu_num), salaries[plyr_stack_indices], lineup, stack_len, team_stack, x)
-                    except: 
+                            print(
+                                "choice dupe",
+                                plyr_stack_indices,
+                                str(lu_num),
+                                salaries[plyr_stack_indices],
+                                lineup,
+                                stack_len,
+                                team_stack,
+                                x,
+                            )
+                    except:
                         stack = False
                         continue
                     plyr_stack_indices = np.nonzero(np.in1d(ids, choices))[0]
-                    x=0
+                    x = 0
                     for p in plyr_stack_indices:
                         player_placed = False
-                        for l in np.nonzero(pos_matrix[p]>0)[0]:
-                            if lineup[l] == '0.0':
+                        for l in np.nonzero(pos_matrix[p] > 0)[0]:
+                            if lineup[l] == "0.0":
                                 lineup[l] = ids[p]
                                 lineup_matchups.append(matchups[p])
-                                x+=1
+                                x += 1
                                 player_placed = True
                                 break
                             if player_placed:
                                 break
-                    #print(plyr_stack_indices, str(lu_num), salaries[plyr_stack_indices], lineup, stack_len, x)
-                    if x==stack_len:
-                        in_lineup[plyr_stack_indices] =1
+                    # print(plyr_stack_indices, str(lu_num), salaries[plyr_stack_indices], lineup, stack_len, x)
+                    if x == stack_len:
+                        in_lineup[plyr_stack_indices] = 1
                         salary += sum(salaries[plyr_stack_indices])
-                        #rint(salary)
+                        # rint(salary)
                         proj += sum(projections[plyr_stack_indices])
-                        #print(proj)
+                        # print(proj)
                         team_stack_len += stack_len
-                        x=0
+                        x = 0
                         stack = False
                     else:
                         stack = False
-                #print(sum(in_lineup), stack_len)
-                for ix, (l,pos) in enumerate(zip(lineup,pos_matrix.T)):
-                    if l == '0.0':
-                        if k <1:
-                            valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (opponents!=team_stack))[0]
+                # print(sum(in_lineup), stack_len)
+                for ix, (l, pos) in enumerate(zip(lineup, pos_matrix.T)):
+                    if l == "0.0":
+                        if k < 1:
+                            valid_players = np.nonzero(
+                                (pos > 0) & (in_lineup == 0) & (opponents != team_stack)
+                            )[0]
                             # grab names of players eligible
                             plyr_list = ids[valid_players]
                             # create np array of probability of being selected based on ownership and who is eligible at the position
                             prob_list = ownership[valid_players]
                             prob_list = prob_list / prob_list.sum()
-                            #try:
+                            # try:
                             choice = rng.choice(plyr_list, p=prob_list)
-                            #except:
+                            # except:
                             #    print(k, pos)
                             choice_idx = np.nonzero(ids == choice)[0]
                             in_lineup[choice_idx] = 1
@@ -834,14 +1138,23 @@ class NFL_GPP_Simulator:
                             proj += projections[choice_idx]
                             def_opp = opponents[choice_idx][0]
                             lineup_matchups.append(matchups[choice_idx[0]])
-                            k +=1                         
-                        elif k >=1:
+                            k += 1
+                        elif k >= 1:
                             remaining_salary = salary_ceiling - salary
                             if players_opposing_def < overlap_limit:
-                                if k == total_players-1:
-                                    valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary) & (salary + salaries >= salary_floor))[0]
+                                if k == total_players - 1:
+                                    valid_players = np.nonzero(
+                                        (pos > 0)
+                                        & (in_lineup == 0)
+                                        & (salaries <= remaining_salary)
+                                        & (salary + salaries >= salary_floor)
+                                    )[0]
                                 else:
-                                    valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary))[0]
+                                    valid_players = np.nonzero(
+                                        (pos > 0)
+                                        & (in_lineup == 0)
+                                        & (salaries <= remaining_salary)
+                                    )[0]
                                 # grab names of players eligible
                                 plyr_list = ids[valid_players]
                                 # create np array of probability of being seelcted based on ownership and who is eligible at the position
@@ -852,10 +1165,12 @@ class NFL_GPP_Simulator:
                                 except:
                                     salary = 0
                                     proj = 0
-                                    if team_stack == '':
+                                    if team_stack == "":
                                         lineup = []
-                                    else: 
-                                        lineup = np.zeros(shape=pos_matrix.shape[1]).astype(str)
+                                    else:
+                                        lineup = np.zeros(
+                                            shape=pos_matrix.shape[1]
+                                        ).astype(str)
                                     player_teams = []
                                     def_opps = []
                                     players_opposing_def = 0
@@ -882,10 +1197,19 @@ class NFL_GPP_Simulator:
                                 if teams[choice_idx][0] == team_stack:
                                     team_stack_len += 1
                             else:
-                                if k == total_players-1:
-                                    valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary) & (salary + salaries >= salary_floor))[0]
+                                if k == total_players - 1:
+                                    valid_players = np.nonzero(
+                                        (pos > 0)
+                                        & (in_lineup == 0)
+                                        & (salaries <= remaining_salary)
+                                        & (salary + salaries >= salary_floor)
+                                    )[0]
                                 else:
-                                    valid_players = np.nonzero((pos > 0) & (in_lineup == 0) & (salaries <= remaining_salary))[0]
+                                    valid_players = np.nonzero(
+                                        (pos > 0)
+                                        & (in_lineup == 0)
+                                        & (salaries <= remaining_salary)
+                                    )[0]
                                 # grab names of players eligible
                                 plyr_list = ids[valid_players]
                                 # create np array of probability of being seelcted based on ownership and who is eligible at the position
@@ -896,10 +1220,12 @@ class NFL_GPP_Simulator:
                                 except:
                                     salary = 0
                                     proj = 0
-                                    if team_stack == '':
+                                    if team_stack == "":
                                         lineup = []
-                                    else: 
-                                        lineup = np.zeros(shape=pos_matrix.shape[1]).astype(str)
+                                    else:
+                                        lineup = np.zeros(
+                                            shape=pos_matrix.shape[1]
+                                        ).astype(str)
                                     player_teams = []
                                     def_opps = []
                                     players_opposing_def = 0
@@ -916,21 +1242,21 @@ class NFL_GPP_Simulator:
                                 in_lineup[choice_idx] = 1
                                 salary += salaries[choice_idx]
                                 proj += projections[choice_idx]
-                                player_teams.append(teams[choice_idx][0]) 
+                                player_teams.append(teams[choice_idx][0])
                                 lineup_matchups.append(matchups[choice_idx[0]])
                                 if teams[choice_idx][0] == def_opp:
                                     players_opposing_def += 1
                                 if teams[choice_idx][0] == team_stack:
-                                    team_stack_len += 1                                    
-                            k +=1 
+                                    team_stack_len += 1
+                            k += 1
                     else:
-                        k+=1
+                        k += 1
                 # Must have a reasonable salary
-                if team_stack_len >=stack_len:
+                if team_stack_len >= stack_len:
                     if salary >= salary_floor and salary <= salary_ceiling:
-                    # loosening reasonable projection constraint for team stacks
+                        # loosening reasonable projection constraint for team stacks
                         if proj >= reasonable_stack_projection:
-                            if len(set(lineup_matchups))> 1:  
+                            if len(set(lineup_matchups)) > 1:
                                 reject = False
                                 lus[lu_num] = {
                                     "Lineup": lineup,
@@ -939,9 +1265,19 @@ class NFL_GPP_Simulator:
                                     "ROI": 0,
                                     "Cashes": 0,
                                     "Type": "generated_stack",
-                                }    
+                                }
                                 if len(set(lineup)) != 9:
-                                    print('stack lineup dupes', lu_num, plyr_stack_indices, str(lu_num), salaries[plyr_stack_indices], lineup, stack_len, team_stack, x)                 
+                                    print(
+                                        "stack lineup dupes",
+                                        lu_num,
+                                        plyr_stack_indices,
+                                        str(lu_num),
+                                        salaries[plyr_stack_indices],
+                                        lineup,
+                                        stack_len,
+                                        team_stack,
+                                        x,
+                                    )
                 #             else:
                 #                 reject_counters["invalid_matchups"] += 1
                 #         else:
@@ -953,7 +1289,7 @@ class NFL_GPP_Simulator:
                 #             reject_counters["salary_too_low"] += 1
                 # else:
                 #     reject_counters["stack_length_insufficient"] += 1
-        #return lus, reject_counters           
+        # return lus, reject_counters
         return lus
 
     def generate_field_lineups(self):
@@ -965,7 +1301,7 @@ class NFL_GPP_Simulator:
                 + " lineups"
             )
         else:
-            print('Generating ' + str(diff) + ' lineups.')
+            print("Generating " + str(diff) + " lineups.")
             ids = []
             ownership = []
             salaries = []
@@ -974,24 +1310,37 @@ class NFL_GPP_Simulator:
             teams = []
             opponents = []
             matchups = []
-            #put def first to make it easier to avoid overlap
-            temp_roster_construction =  ['DST','QB','RB','RB','WR','WR','WR','TE','FLEX']
+            # put def first to make it easier to avoid overlap
+            temp_roster_construction = [
+                "DST",
+                "QB",
+                "RB",
+                "RB",
+                "WR",
+                "WR",
+                "WR",
+                "TE",
+                "FLEX",
+            ]
             for k in self.player_dict.keys():
-                if 'Team' not in self.player_dict[k].keys():
-                    print(self.player_dict[k]['Name'], ' name mismatch between projections and player ids!')
-                ids.append(self.player_dict[k]['ID'])
-                ownership.append(self.player_dict[k]['Ownership'])
-                salaries.append(self.player_dict[k]['Salary'])
-                if self.player_dict[k]['fieldFpts'] >= self.projection_minimum:
-                    projections.append(self.player_dict[k]['fieldFpts'])
+                if "Team" not in self.player_dict[k].keys():
+                    print(
+                        self.player_dict[k]["Name"],
+                        " name mismatch between projections and player ids!",
+                    )
+                ids.append(self.player_dict[k]["ID"])
+                ownership.append(self.player_dict[k]["Ownership"])
+                salaries.append(self.player_dict[k]["Salary"])
+                if self.player_dict[k]["fieldFpts"] >= self.projection_minimum:
+                    projections.append(self.player_dict[k]["fieldFpts"])
                 else:
                     projections.append(0)
-                teams.append(self.player_dict[k]['Team'])
-                opponents.append(self.player_dict[k]['Opp'])
-                matchups.append(self.player_dict[k]['Matchup'])
+                teams.append(self.player_dict[k]["Team"])
+                opponents.append(self.player_dict[k]["Opp"])
+                matchups.append(self.player_dict[k]["Matchup"])
                 pos_list = []
                 for pos in temp_roster_construction:
-                    if pos in self.player_dict[k]['Position']:
+                    if pos in self.player_dict[k]["Position"]:
                         pos_list.append(1)
                     else:
                         pos_list.append(0)
@@ -1011,23 +1360,47 @@ class NFL_GPP_Simulator:
             opponents = np.array(opponents)
             overlap_limit = self.overlap_limit
             problems = []
-            stacks = np.random.binomial(n=1,p=self.pct_field_using_stacks,size=diff)
-            stack_len = np.random.choice(a=[1,2],p=[1-self.pct_field_double_stacks, self.pct_field_double_stacks],size=diff)
-            max_stack_len = 2 
+            stacks = np.random.binomial(n=1, p=self.pct_field_using_stacks, size=diff)
+            stack_len = np.random.choice(
+                a=[1, 2],
+                p=[1 - self.pct_field_double_stacks, self.pct_field_double_stacks],
+                size=diff,
+            )
+            max_stack_len = 2
             num_players_in_roster = len(self.roster_construction)
             a = list(self.stacks_dict.keys())
             p = np.array(list(self.stacks_dict.values()))
-            probs = p/sum(p)
+            probs = p / sum(p)
             stacks = stacks.astype(str)
             for i in range(len(stacks)):
-                if stacks[i] == '1':
-                    choice = random.choices(a,weights=probs,k=1)
+                if stacks[i] == "1":
+                    choice = random.choices(a, weights=probs, k=1)
                     stacks[i] = choice[0]
                 else:
-                    stacks[i] = ''
+                    stacks[i] = ""
             # creating tuples of the above np arrays plus which lineup number we are going to create
             for i in range(diff):
-                lu_tuple = (i, ids, in_lineup, pos_matrix,ownership, salary_floor, salary_ceiling, optimal_score, salaries, projections,max_pct_off_optimal, teams, opponents, stacks[i], stack_len[i], overlap_limit, max_stack_len, matchups, num_players_in_roster)
+                lu_tuple = (
+                    i,
+                    ids,
+                    in_lineup,
+                    pos_matrix,
+                    ownership,
+                    salary_floor,
+                    salary_ceiling,
+                    optimal_score,
+                    salaries,
+                    projections,
+                    max_pct_off_optimal,
+                    teams,
+                    opponents,
+                    stacks[i],
+                    stack_len[i],
+                    overlap_limit,
+                    max_stack_len,
+                    matchups,
+                    num_players_in_roster,
+                )
                 problems.append(lu_tuple)
             start_time = time.time()
             with mp.Pool() as pool:
@@ -1040,7 +1413,7 @@ class NFL_GPP_Simulator:
                 )
                 pool.close()
                 pool.join()
-            print('pool closed')
+            print("pool closed")
             if len(self.field_lineups) == 0:
                 new_keys = list(range(0, self.field_size))
             else:
@@ -1052,11 +1425,11 @@ class NFL_GPP_Simulator:
             # for i, (lineup, reject_counter) in enumerate(output):
             #     if nk in self.field_lineups.keys():
             #         print("bad lineups dict, please check dk_data files")
-                
+
             #     # Merge the reject counters into the overall counter
             #     for key, value in reject_counter.items():
             #         overall_reject_counters[key] += value
-                
+
             #     self.field_lineups[nk] = lineup  # Adjusted to handle the unpacked tuple
             #     nk += 1
             for i, o in enumerate(output):
@@ -1067,32 +1440,42 @@ class NFL_GPP_Simulator:
             end_time = time.time()
             print("lineups took " + str(end_time - start_time) + " seconds")
             print(str(diff) + " field lineups successfully generated")
-            #print("Reject counters:", dict(overall_reject_counters))
+            # print("Reject counters:", dict(overall_reject_counters))
 
-            #print(self.field_lineups)
+            # print(self.field_lineups)
 
-
-    def calc_gamma(self,mean,sd):
+    def calc_gamma(self, mean, sd):
         alpha = (mean / sd) ** 2
-        beta = sd ** 2 / mean
-        return alpha,beta
+        beta = sd**2 / mean
+        return alpha, beta
 
     @staticmethod
-    def run_simulation_for_game(team1_id, team1, team2_id, team2, qb_samples_dict, num_iterations, roster_construction):
-# Define correlations between positions
+    def run_simulation_for_game(
+        team1_id,
+        team1,
+        team2_id,
+        team2,
+        qb_samples_dict,
+        num_iterations,
+        roster_construction,
+    ):
+        # Define correlations between positions
 
         def get_corr_value(player1, player2):
             # If players are on the same team and have the same position
-            if player1['Team'] == player2['Team'] and player1['Position'][0] == player2['Position'][0]:
+            if (
+                player1["Team"] == player2["Team"]
+                and player1["Position"][0] == player2["Position"][0]
+            ):
                 return -0.25
-            
-            if player1['Team'] != player2['Team']:
-                player_2_pos = 'Opp ' + str(player2['Position'][0])
+
+            if player1["Team"] != player2["Team"]:
+                player_2_pos = "Opp " + str(player2["Position"][0])
             else:
-                player_2_pos = player2['Position'][0]
+                player_2_pos = player2["Position"][0]
 
             # Fetch correlation value based on player1's primary position for player2's primary position
-            return player1['Correlations'][player_2_pos]
+            return player1["Correlations"][player_2_pos]
 
         def build_covariance_matrix(players):
             N = len(players)
@@ -1102,26 +1485,32 @@ class NFL_GPP_Simulator:
             for i in range(N):
                 for j in range(N):
                     if i == j:
-                        matrix[i][j] = players[i]['StdDev'] ** 2  # Variance on the diagonal
+                        matrix[i][j] = (
+                            players[i]["StdDev"] ** 2
+                        )  # Variance on the diagonal
                         corr_matrix[i][j] = 1
                     else:
-                        matrix[i][j] = get_corr_value(players[i], players[j]) * players[i]['StdDev'] * players[j]['StdDev']
+                        matrix[i][j] = (
+                            get_corr_value(players[i], players[j])
+                            * players[i]["StdDev"]
+                            * players[j]["StdDev"]
+                        )
                         corr_matrix[i][j] = get_corr_value(players[i], players[j])
             return matrix, corr_matrix
-        
+
         def ensure_positive_semidefinite(matrix):
             eigs = np.linalg.eigvals(matrix)
             if np.any(eigs < 0):
                 jitter = abs(min(eigs)) + 1e-6  # a small value
                 matrix += np.eye(len(matrix)) * jitter
             return matrix
-        
+
         game = team1 + team2
         covariance_matrix, corr_matrix = build_covariance_matrix(game)
-        #print(team1_id, team2_id)
-        #print(corr_matrix)
+        # print(team1_id, team2_id)
+        # print(corr_matrix)
         corr_matrix = np.array(corr_matrix)
-        
+
         # Given eigenvalues and eigenvectors from previous code
         eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
 
@@ -1132,29 +1521,32 @@ class NFL_GPP_Simulator:
         covariance_matrix = eigenvectors.dot(np.diag(eigenvalues)).dot(eigenvectors.T)
 
         try:
-            samples = multivariate_normal.rvs(mean=[player['Fpts'] for player in game], cov=covariance_matrix, size=num_iterations)
+            samples = multivariate_normal.rvs(
+                mean=[player["Fpts"] for player in game],
+                cov=covariance_matrix,
+                size=num_iterations,
+            )
         except:
-            print(team1_id, team2_id, 'bad matrix')
-                
+            print(team1_id, team2_id, "bad matrix")
+
         player_samples = []
         for i, player in enumerate(game):
-            if 'QB' in player['Position']:
-                sample = samples[:, i]            
+            if "QB" in player["Position"]:
+                sample = samples[:, i]
             else:
                 sample = samples[:, i]
             # if player['Team'] in ['LAR','SEA']:
             #     print(player['Name'], player['Fpts'], player['StdDev'], sample, np.mean(sample), np.std(sample))
             player_samples.append(sample)
-                
+
         temp_fpts_dict = {}
-        #print(team1_id, team2_id, len(game), uniform_samples.T.shape, len(player_samples), covariance_matrix.shape )
-                
+        # print(team1_id, team2_id, len(game), uniform_samples.T.shape, len(player_samples), covariance_matrix.shape )
+
         for i, player in enumerate(game):
-            temp_fpts_dict[player['ID']] = player_samples[i]
+            temp_fpts_dict[player["ID"]] = player_samples[i]
 
         # fig, (ax1, ax2, ax3,ax4) = plt.subplots(4, figsize=(15, 25))
         # fig.tight_layout(pad=5.0)
-
 
         # for i, player in enumerate(game):
         #     sns.kdeplot(player_samples[i], ax=ax1, label=player['Name'])
@@ -1166,13 +1558,13 @@ class NFL_GPP_Simulator:
         # ax1.tick_params(axis='both', which='both', labelsize=14)
 
         # y_min, y_max = ax1.get_ylim()
-        # ax1.set_ylim(y_min, y_max*1.1) 
+        # ax1.set_ylim(y_min, y_max*1.1)
 
         # ax1.set_xlim(-5, 50)
 
         # # # Sorting players and correlating their data
         # player_names = [f"{player['Name']} ({player['Position']})" if player['Position'] is not None else f"{player['Name']} (P)" for player in game]
-        
+
         # # # Ensuring the data is correctly structured as a 2D array
         # sorted_samples_array = np.array(player_samples)
         # if sorted_samples_array.shape[0] < sorted_samples_array.shape[1]:
@@ -1180,9 +1572,9 @@ class NFL_GPP_Simulator:
 
         # correlation_matrix = pd.DataFrame(np.corrcoef(sorted_samples_array.T), columns=player_names, index=player_names)
 
-        # sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})  
+        # sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})
         # ax2.set_title(f'Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
-        
+
         # original_corr_matrix = pd.DataFrame(corr_matrix, columns=player_names, index=player_names)
         # sns.heatmap(original_corr_matrix, annot=True, ax=ax3, cmap='YlGnBu', cbar_kws={"shrink": .5})
         # ax3.set_title(f'Original Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
@@ -1193,15 +1585,14 @@ class NFL_GPP_Simulator:
 
         # plt.savefig(f'output/Team_{team1_id}{team2_id}_Distributions_Correlation.png', bbox_inches='tight')
         # plt.close()
-        
-        return temp_fpts_dict
 
+        return temp_fpts_dict
 
     def run_tournament_simulation(self):
         print("Running " + str(self.num_iterations) + " simulations")
         for f in self.field_lineups:
-            if len(self.field_lineups[f]['Lineup']) != 9:
-                print('bad lineup', f, self.field_lineups[f])
+            if len(self.field_lineups[f]["Lineup"]) != 9:
+                print("bad lineup", f, self.field_lineups[f])
 
         start_time = time.time()
         temp_fpts_dict = {}
@@ -1209,10 +1600,20 @@ class NFL_GPP_Simulator:
         size = self.num_iterations
         game_simulation_params = []
         for m in self.matchups:
-            game_simulation_params.append((m[0], self.teams_dict[m[0]], m[1], self.teams_dict[m[1]], qb_samples_dict, self.num_iterations, self.roster_construction))
+            game_simulation_params.append(
+                (
+                    m[0],
+                    self.teams_dict[m[0]],
+                    m[1],
+                    self.teams_dict[m[1]],
+                    qb_samples_dict,
+                    self.num_iterations,
+                    self.roster_construction,
+                )
+            )
         with mp.Pool() as pool:
             results = pool.starmap(self.run_simulation_for_game, game_simulation_params)
-        
+
         for res in results:
             temp_fpts_dict.update(res)
 
@@ -1222,7 +1623,9 @@ class NFL_GPP_Simulator:
         payout_array = np.array(list(self.payout_structure.values()))
         # subtract entry fee
         payout_array = payout_array - self.entry_fee
-        l_array = np.full(shape=self.field_size - len(payout_array), fill_value=-self.entry_fee)
+        l_array = np.full(
+            shape=self.field_size - len(payout_array), fill_value=-self.entry_fee
+        )
         payout_array = np.concatenate((payout_array, l_array))
         for index, values in self.field_lineups.items():
             try:
@@ -1230,10 +1633,10 @@ class NFL_GPP_Simulator:
             except KeyError:
                 for player in values["Lineup"]:
                     if player not in temp_fpts_dict.keys():
-                        for k,v in self.player_dict.items():
-                            if v['ID'] == player:
-                                print(k,v)
-                #print('cant find player in sim dict', values["Lineup"], temp_fpts_dict.keys())
+                        for k, v in self.player_dict.items():
+                            if v["ID"] == player:
+                                print(k, v)
+                # print('cant find player in sim dict', values["Lineup"], temp_fpts_dict.keys())
             # store lineup fpts sum in 2d np array where index (row) corresponds to index of field_lineups and columns are the fpts from each sim
             fpts_array[index] = fpts_sim
         ranks = np.argsort(fpts_array, axis=0)[::-1]
@@ -1254,12 +1657,17 @@ class NFL_GPP_Simulator:
                 self.field_lineups[idx]["ROI"] += roi[idx]
         end_time = time.time()
         diff = end_time - start_time
-        print(str(self.num_iterations) + " tournament simulations finished in " + str(diff) + "seconds. Outputting.")
+        print(
+            str(self.num_iterations)
+            + " tournament simulations finished in "
+            + str(diff)
+            + "seconds. Outputting."
+        )
 
     def output(self):
         unique = {}
         for index, x in self.field_lineups.items():
-            #if index == 0:
+            # if index == 0:
             #    print(x)
             lu_type = x["Type"]
             salary = 0
@@ -1270,28 +1678,28 @@ class NFL_GPP_Simulator:
             lu_names = []
             lu_teams = []
             qb_stack = 0
-            qb_tm = ''
+            qb_tm = ""
             players_vs_def = 0
             def_opps = []
             for id in x["Lineup"]:
-                for k,v in self.player_dict.items():
-                    if v["ID"] == id:  
-                        if 'DST' in v["Position"]:
-                            def_opps.append(v['Opp'])  
-                        if 'QB' in v['Position']:
-                            qb_tm = v['Team']       
+                for k, v in self.player_dict.items():
+                    if v["ID"] == id:
+                        if "DST" in v["Position"]:
+                            def_opps.append(v["Opp"])
+                        if "QB" in v["Position"]:
+                            qb_tm = v["Team"]
             for id in x["Lineup"]:
-                for k,v in self.player_dict.items():
+                for k, v in self.player_dict.items():
                     if v["ID"] == id:
                         salary += v["Salary"]
                         fpts_p += v["Fpts"]
-                        fieldFpts_p += v['fieldFpts']
+                        fieldFpts_p += v["fieldFpts"]
                         ceil_p += v["Ceiling"]
-                        own_p.append(v["Ownership"]/100)
+                        own_p.append(v["Ownership"] / 100)
                         lu_names.append(v["Name"])
-                        if 'DST' not in v["Position"]:
-                            lu_teams.append(v['Team'])
-                            if v['Team'] in def_opps:
+                        if "DST" not in v["Position"]:
+                            lu_teams.append(v["Team"])
+                            if v["Team"] in def_opps:
                                 players_vs_def += 1
                         continue
             counter = collections.Counter(lu_teams)
@@ -1300,12 +1708,12 @@ class NFL_GPP_Simulator:
             # Find the QB team in stacks and set it as primary stack, remove it from stacks
             for s in stacks:
                 if s[0] == qb_tm:
-                    primaryStack = str(qb_tm) + ' ' + str(s[1])
+                    primaryStack = str(qb_tm) + " " + str(s[1])
                     stacks.remove(s)
                     break
 
             # After removing QB team, the first team in stacks will be the team with most players not in QB stack
-            secondaryStack = str(stacks[0][0]) + ' ' + str(stacks[0][1])
+            secondaryStack = str(stacks[0][0]) + " " + str(stacks[0][1])
             own_p = np.prod(own_p)
             win_p = round(x["Wins"] / self.num_iterations * 100, 2)
             top10_p = round(x["Top10"] / self.num_iterations * 100, 2)
@@ -1347,7 +1755,7 @@ class NFL_GPP_Simulator:
                         primaryStack,
                         secondaryStack,
                         players_vs_def,
-                        lu_type
+                        lu_type,
                     )
                 else:
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{}%,{}%,{}%,{},{},{},{}".format(
@@ -1379,7 +1787,7 @@ class NFL_GPP_Simulator:
                         primaryStack,
                         secondaryStack,
                         players_vs_def,
-                        lu_type
+                        lu_type,
                     )
             elif self.site == "fd":
                 if self.use_contest_data:
@@ -1418,7 +1826,7 @@ class NFL_GPP_Simulator:
                         primaryStack,
                         secondaryStack,
                         players_vs_def,
-                        lu_type
+                        lu_type,
                     )
                 else:
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{},{}%,{}%,{},{},{},{},{}".format(
@@ -1450,7 +1858,7 @@ class NFL_GPP_Simulator:
                         primaryStack,
                         secondaryStack,
                         players_vs_def,
-                        lu_type
+                        lu_type,
                     )
             unique[index] = lineup_str
 
@@ -1490,7 +1898,9 @@ class NFL_GPP_Simulator:
             ),
         )
         with open(out_path, "w") as f:
-            f.write("Player,Position,Team,Win%,Top10%,Sim. Own%,Proj. Own%,Avg. Return\n")
+            f.write(
+                "Player,Position,Team,Win%,Top10%,Sim. Own%,Proj. Own%,Avg. Return\n"
+            )
             unique_players = {}
             for val in self.field_lineups.values():
                 for player in val["Lineup"]:
@@ -1518,7 +1928,7 @@ class NFL_GPP_Simulator:
                 win_p = round(data["Wins"] / self.num_iterations * 100, 2)
                 top10_p = round(data["Top10"] / self.num_iterations / 10 * 100, 2)
                 roi_p = round(data["ROI"] / data["In"] / self.num_iterations, 2)
-                for k,v in self.player_dict.items():
+                for k, v in self.player_dict.items():
                     if player == v["ID"]:
                         proj_own = v["Ownership"]
                         p_name = v["Name"]
@@ -1527,7 +1937,7 @@ class NFL_GPP_Simulator:
                         break
                 f.write(
                     "{},{},{},{}%,{}%,{}%,{}%,${}\n".format(
-                        p_name.replace("#","-"),
+                        p_name.replace("#", "-"),
                         position,
                         team,
                         win_p,
