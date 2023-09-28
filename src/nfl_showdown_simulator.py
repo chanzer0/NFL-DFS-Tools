@@ -699,20 +699,38 @@ class NFL_Showdown_Simulator:
                     continue
                 # storing if this lineup was made by an optimizer or with the generation process in this script
                 error = False
-                for l in lineup:
-                    ids = [self.player_dict[k]["ID"] for k in self.player_dict]
-                    if l not in ids:
-                        print("lineup {} is missing players {}".format(i, l))
-                        if l in self.id_name_dict:
-                            print(self.id_name_dict[l])
-                        error = True
+                if self.site == "fd":
+                    un_key_lu = []
+                    i=0
+                    for l in lineup:
+                        ids = [self.player_dict[k]["ID"] for k in self.player_dict]
+                        if l not in ids:
+                            print("lineup {} is missing players {}".format(i, l))
+                            if l in self.id_name_dict:
+                                print(self.id_name_dict[l])
+                            error = True
+                        else:
+                            for k in self.player_dict:
+                                if self.player_dict[k]["ID"] == l:
+                                    if i == 0:
+                                        if self.player_dict[k]['rosterPosition'] == 'CPT':
+                                            un_key_lu.append(self.player_dict[k]['UniqueKey'])
+                                        else:
+                                            pass
+                                    else:
+                                        if self.player_dict[k]['rosterPosition'] == 'FLEX':
+                                            un_key_lu.append(self.player_dict[k]['UniqueKey'])
+                                        else:
+                                            pass                                    
+                        i+=1
                 if len(lineup) < len(self.roster_construction):
                     print("lineup {} is missing players".format(i))
                     continue
+                lu = lineup if self.site == "dk" else un_key_lu
                 if not error:
                     self.field_lineups[j] = {
                         "Lineup": {
-                            "Lineup": lineup,
+                            "Lineup": lu,
                             "Wins": 0,
                             "Top10": 0,
                             "ROI": 0,
@@ -1363,6 +1381,8 @@ class NFL_Showdown_Simulator:
     def output(self):
         unique = {}
         for index, data in self.field_lineups.items():
+            #if index == 0:
+            #    print(data)
             lineup = data["Lineup"]["Lineup"]
             lineup_data = data["Lineup"]
             lu_type = lineup_data["Type"]
@@ -1400,10 +1420,10 @@ class NFL_Showdown_Simulator:
                         lu_names.append(f"{player_data.get('Name', '')} ({player_id})")
                     else:
                         lu_names.append(
-                            f"{player_data.get('Name', '')} ({player_data.get('ID', '')})"
+                            f"{player_data.get('Name', '').replace('#','-')} ({player_data.get('ID', '')})"
                         )
+                    lu_teams.append(player_data["Team"])
                     if "DST" not in player_data["Position"]:
-                        lu_teams.append(player_data["Team"])
                         if player_data["Team"] in def_opps:
                             players_vs_def += 1
 
