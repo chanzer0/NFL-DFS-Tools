@@ -158,160 +158,115 @@ class NFL_Showdown_Simulator:
     def get_optimal(self):
         # print(s['Name'],s['ID'])
         # print(self.player_dict)
+        #for p in self.player_dict:
+        #    print(p,self.player_dict[p]['UniqueKey'], self.player_dict[p]['fieldFpts'], self.player_dict[p]['Salary'])
         problem = plp.LpProblem("NFL", plp.LpMaximize)
         lp_variables = {
-            self.player_dict[(player, pos_str, team)]["ID"]: plp.LpVariable(
-                str(self.player_dict[(player, pos_str, team)]["ID"]), cat="Binary"
+            self.player_dict[player]["UniqueKey"]: plp.LpVariable(
+                str(self.player_dict[player]["UniqueKey"]),
+                cat="Binary",
             )
-            for (player, pos_str, team) in self.player_dict
+            for player in self.player_dict
         }
 
-        # set the objective - maximize fpts
+        # set the objective - maximize fpts & set randomness amount from config
         problem += (
             plp.lpSum(
-                self.player_dict[(player, pos_str, team)]["fieldFpts"]
-                * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                for (player, pos_str, team) in self.player_dict
+                self.player_dict[player]["fieldFpts"]
+                * lp_variables[self.player_dict[player]["UniqueKey"]]
+                for player in self.player_dict
             ),
             "Objective",
         )
 
         # Set the salary constraints
+        max_salary = 50000 if self.site == "dk" else 60000
+        min_salary = 44000 if self.site == "dk" else 54000
         problem += (
             plp.lpSum(
                 self.player_dict[(player, pos_str, team)]["Salary"]
-                * lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
+                * lp_variables[self.player_dict[(player, pos_str, team)]["UniqueKey"]]
                 for (player, pos_str, team) in self.player_dict
             )
-            <= self.salary
+            <= max_salary,
+            "Max Salary",
+        )
+        problem += (
+            plp.lpSum(
+                self.player_dict[(player, pos_str, team)]["Salary"]
+                * lp_variables[self.player_dict[(player, pos_str, team)]["UniqueKey"]]
+                for (player, pos_str, team) in self.player_dict
+            )
+            >= min_salary,
+            "Min Salary",
         )
 
-        player_id_dict = {
-            (player, team): player_data["ID"]
-            for (player, pos_str, team), player_data in self.player_dict.items()
-        }
+        # Need exactly 1 CPT
+        captain_tuples = [
+            (player, pos_str, team)
+            for (player, pos_str, team) in self.player_dict
+            if pos_str == "CPT"
+        ]
+        problem += (
+            plp.lpSum(
+                lp_variables[self.player_dict[cpt_tuple]["UniqueKey"]]
+                for cpt_tuple in captain_tuples
+            )
+            == 1,
+            f"CPT == 1",
+        )
 
+        # Need exactly 5 FLEX on DK, 4 on FD
+        flex_tuples = [
+            (player, pos_str, team)
+            for (player, pos_str, team) in self.player_dict
+            if pos_str == "FLEX"
+        ]
+
+        number_needed = 5 if self.site == "dk" else 4
+        problem += (
+            plp.lpSum(
+                lp_variables[self.player_dict[flex_tuple]["UniqueKey"]]
+                for flex_tuple in flex_tuples
+            )
+            == number_needed,
+            f"FLEX == {number_needed}",
+        )
+
+        # Max 5 players from one team if dk, 4 if fd
+        for teamIdent in self.team_list:
+            players_on_team = [
+                (player, position, team)
+                for (player, position, team) in self.player_dict
+                if teamIdent == team
+            ]
+            problem += (
+                plp.lpSum(
+                    lp_variables[self.player_dict[player_tuple]["UniqueKey"]]
+                    for player_tuple in players_on_team
+                )
+                <= number_needed,
+                f"Max {number_needed} players from one team {teamIdent}",
+            )
+
+        # Can't roster the same player as cpt and flex
+        players_grouped_by_name = {}
         for player, pos_str, team in self.player_dict:
-            if pos_str == "CPT":
-                # Get the player's ID in both the CPT and FLEX positions
-                cpt_id = self.player_dict[(player, "CPT", team)]["ID"]
-                flex_id = player_id_dict.get((player, team))
+            if player in players_grouped_by_name:
+                players_grouped_by_name[player].append((player, pos_str, team))
+            else:
+                players_grouped_by_name[player] = [(player, pos_str, team)]
 
-                if flex_id:
-                    # Add a constraint to ensure that the player can't be selected as both CPT and FLEX
-                    problem += lp_variables[cpt_id] + lp_variables[flex_id] <= 1
-
-        if self.site == "dk":
-            # Can have exactly one CPT
+        for _, tuple_list in players_grouped_by_name.items():
             problem += (
                 plp.lpSum(
-                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                    for (player, pos_str, team) in self.player_dict
-                    if "CPT" in self.player_dict[(player, pos_str, team)]["Position"]
+                    lp_variables[self.player_dict[player_tuple]["UniqueKey"]]
+                    for player_tuple in tuple_list
                 )
-                == 1
+                <= 1,
+                f"No player in both CPT and FLEX {tuple_list}",
             )
-            # Need 4 UTIL
-            problem += (
-                plp.lpSum(
-                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                    for (player, pos_str, team) in self.player_dict
-                    if "FLEX" in self.player_dict[(player, pos_str, team)]["Position"]
-                )
-                == 5
-            )
-            # Can only roster 5 total players
-            problem += (
-                plp.lpSum(
-                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                    for (player, pos_str, team) in self.player_dict
-                )
-                == 6
-            )
-            # Max 4 per team
-            for team in self.team_list:
-                problem += (
-                    plp.lpSum(
-                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                        for (player, pos_str, team) in self.player_dict
-                        if self.player_dict[(player, pos_str, team)]["Team"] == team
-                    )
-                    <= 5
-                )
 
-        elif self.site == "fd":
-            # Can have exactly one CPT
-            problem += (
-                plp.lpSum(
-                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                    for (player, pos_str, team) in self.player_dict
-                    if "CPT" in self.player_dict[(player, pos_str, team)]["Position"]
-                )
-                == 1
-            )
-            # Need 4 UTIL
-            problem += (
-                plp.lpSum(
-                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                    for (player, pos_str, team) in self.player_dict
-                    if "FLEX" in self.player_dict[(player, pos_str, team)]["Position"]
-                )
-                == 4
-            )
-            # Can only roster 5 total players
-            problem += (
-                plp.lpSum(
-                    lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                    for (player, pos_str, team) in self.player_dict
-                )
-                == 5
-            )
-            # Max 4 per team
-            for team in self.team_list:
-                problem += (
-                    plp.lpSum(
-                        lp_variables[self.player_dict[(player, pos_str, team)]["ID"]]
-                        for (player, pos_str, team) in self.player_dict
-                        if self.player_dict[(player, pos_str, team)]["Team"] == team
-                    )
-                    <= 4
-                )
-
-        # print(f"Problem Name: {problem.name}")
-        # print(f"Sense: {problem.sense}")
-
-        # # Print the objective
-        # print("\nObjective:")
-        # try:
-        #     for v, coef in problem.objective.items():
-        #         print(f"{coef}*{v.name}", end=' + ')
-        # except Exception as e:
-        #     print(f"Error while printing objective: {e}")
-
-        # # Print the constraints
-        # print("\nConstraints:")
-        # for constraint in problem.constraints.values():
-        #     try:
-        #         # Extract the left-hand side, right-hand side, and the operator
-        #         lhs = "".join(f"{coef}*{var.name}" for var, coef in constraint.items())
-        #         rhs = constraint.constant
-        #         if constraint.sense == 1:
-        #             op = ">="
-        #         elif constraint.sense == -1:
-        #             op = "<="
-        #         else:
-        #             op = "="
-        #         print(f"{lhs} {op} {rhs}")
-        #     except Exception as e:
-        #         print(f"Error while printing constraint: {e}")
-
-        # # Print the variables
-        # print("\nVariables:")
-        # try:
-        #     for v in problem.variables():
-        #         print(f"{v.name}: LowBound={v.lowBound}, UpBound={v.upBound}, Cat={v.cat}")
-        # except Exception as e:
-        #     print(f"Error while printing variable: {e}")
         # Crunch!
         try:
             problem.solve(plp.PULP_CBC_CMD(msg=0))
@@ -321,23 +276,30 @@ class NFL_Showdown_Simulator:
                     len(self.num_lineups), self.num_lineups
                 )
             )
-        except TypeError:
-            for p, s in self.player_dict.items():
-                if s["ID"] == 0:
-                    print(
-                        s["Name"] + " name mismatch between projections and player ids"
-                    )
-                if s["ID"] == "":
-                    print(
-                        s["Name"] + " name mismatch between projections and player ids"
-                    )
-                if s["ID"] is None:
-                    print(s["Name"])
-        score = str(problem.objective)
-        for v in problem.variables():
-            score = score.replace(v.name, str(v.varValue))
 
-        self.optimal_score = eval(score)
+        # problem.writeLP("file.lp")
+
+        # Get the lineup and add it to our list
+        player_unqiue_keys = [
+            player for player in lp_variables if lp_variables[player].varValue != 0
+        ]
+        players = []
+        for key, value in self.player_dict.items():
+            if value["UniqueKey"] in player_unqiue_keys:
+                players.append(key)
+
+        fpts_proj = sum(self.player_dict[player]["fieldFpts"] for player in players)
+        #sal_used = sum(self.player_dict[player]["Salary"] for player in players)
+    
+        var_values = [ value.varValue for value in problem.variables() if value.varValue != 0 ]
+        player_unqiue_keys = [
+            player for player in lp_variables if lp_variables[player].varValue != 0
+        ]
+
+        #print((players,player_unqiue_keys, fpts_proj, sal_used,var_values))
+        #problem.writeLP("file.lp")
+        
+        self.optimal_score = float(fpts_proj)
 
     # Load player IDs for exporting
     def load_player_ids(self, path):
@@ -375,14 +337,15 @@ class NFL_Showdown_Simulator:
                         ]
                         self.player_dict[(player_name, pos_str, team)]["Opp"] = team_opp
                         self.player_dict[(player_name, pos_str, team)]["Matchup"] = opp
+                        self.player_dict[(player_name, pos_str, team)]["UniqueKey"] = str(row["id"])
                 elif self.site == "fd":
                     for position in ["CPT", "FLEX"]:
                         if (player_name, position, team) in self.player_dict:
                             if position == "CPT":
-                                pid = str(row["id"]) + "69696969"
+                                self.player_dict[(player_name, position, team)]["UniqueKey"] = f'CPT:{row["id"]}'
                             else:
-                                pid = str(row["id"])
-                            self.player_dict[(player_name, position, team)]["ID"] = pid
+                                self.player_dict[(player_name, position, team)]["UniqueKey"] = f'FLEX:{row["id"]}'
+                            self.player_dict[(player_name, position, team)]["ID"] = row["id"]
                             self.player_dict[(player_name, position, team)][
                                 "Team"
                             ] = row[team_key]
@@ -504,7 +467,7 @@ class NFL_Showdown_Simulator:
                 else:
                     ceil = fpts + stddev
                 if row["salary"]:
-                    sal = int(row["salary"].replace(",", ""))
+                    sal = float(row["salary"].replace(",", ""))
                 if pos == "QB":
                     corr = {
                         "QB": 1,
@@ -601,6 +564,8 @@ class NFL_Showdown_Simulator:
                 if self.site == "fd":
                     if team == "JAX":
                         team = "JAC"
+                if team not in self.team_list:
+                    self.team_list.append(team)
                 own = float(row["own%"].replace("%", ""))
                 if own == 0:
                     own = 0.1
@@ -640,6 +605,10 @@ class NFL_Showdown_Simulator:
                 self.player_dict[(player_name, pos_str, team)] = player_data
                 self.teams_dict[team].append(player_data)
                 pos_str = "CPT"
+                if self.site == "dk":
+                    cpt_sal = 1.5*sal
+                elif self.site == "fd":
+                    cpt_sal = sal
                 player_data = {
                     "Fpts": 1.5 * fpts,
                     "fieldFpts": 1.5 * fieldFpts,
@@ -649,7 +618,7 @@ class NFL_Showdown_Simulator:
                     "Team": team,
                     "Opp": "",
                     "ID": "",
-                    "Salary": 1.5 * sal,
+                    "Salary": cpt_sal,
                     "StdDev": stddev,
                     "Ceiling": ceil,
                     "Ownership": cptOwn,
@@ -932,8 +901,8 @@ class NFL_Showdown_Simulator:
     def remap_player_dict(self, player_dict):
         remapped_dict = {}
         for key, value in player_dict.items():
-            if "ID" in value:
-                player_id = value["ID"]
+            if "UniqueKey" in value:
+                player_id = value["UniqueKey"]
                 remapped_dict[player_id] = value
             else:
                 raise KeyError(f"Player details for {key} does not contain an 'ID' key")
@@ -952,6 +921,8 @@ class NFL_Showdown_Simulator:
 
         # Initialize problem list
         problems = self.initialize_problems_list(diff, player_data)
+        
+        #print(problems[0])
 
         # Handle stacks logic
         # stacks = self.handle_stacks_logic(diff)
@@ -991,7 +962,7 @@ class NFL_Showdown_Simulator:
                 print(
                     f"{player_info['Name']} name mismatch between projections and player ids!"
                 )
-            ids.append(player_info["ID"])
+            ids.append(player_info["UniqueKey"])
             ownership.append(player_info["Ownership"])
             salaries.append(player_info["Salary"])
             projections.append(max(0, player_info.get("fieldFpts", 0)))
@@ -1200,7 +1171,7 @@ class NFL_Showdown_Simulator:
 
         temp_fpts_dict = {}
         for i, player in enumerate(game):
-            temp_fpts_dict[player["ID"]] = player_samples[i]
+            temp_fpts_dict[player["UniqueKey"]] = player_samples[i]
 
         return temp_fpts_dict
 
@@ -1250,7 +1221,7 @@ class NFL_Showdown_Simulator:
                 player_data_flex = [
                     data
                     for (name, pos, team), data in self.player_dict.items()
-                    if data["ID"] == player_id and pos == "FLEX"
+                    if data["UniqueKey"] == player_id and pos == "FLEX"
                 ]
                 if player_data_flex:
                     player_data_flex = player_data_flex[
@@ -1264,7 +1235,7 @@ class NFL_Showdown_Simulator:
                     )
                     if player_data_cpt:
                         cpt_outcomes = flex_outcomes * 1.5
-                        cpt_dict[player_data_cpt["ID"]] = cpt_outcomes
+                        cpt_dict[player_data_cpt["UniqueKey"]] = cpt_outcomes
             return cpt_dict
 
         # Validation on lineups
@@ -1407,7 +1378,7 @@ class NFL_Showdown_Simulator:
             def_opps = []
             players_vs_def = 0
 
-            player_dict_values = {v["ID"]: v for k, v in self.player_dict.items()}
+            player_dict_values = {v["UniqueKey"]: v for k, v in self.player_dict.items()}
 
             for player_id in lineup:
                 player_data = player_dict_values.get(player_id, {})
@@ -1508,7 +1479,7 @@ class NFL_Showdown_Simulator:
                 top10_p = round(data["Top10"] / self.num_iterations / 10 * 100, 2)
                 roi_p = round(data["ROI"] / data["In"] / self.num_iterations, 2)
                 for k, v in self.player_dict.items():
-                    if v["ID"] == player_id:
+                    if v["UniqueKey"] == player_id:
                         player_info = v
                         break
                 proj_own = player_info.get("Ownership", "N/A")

@@ -1215,6 +1215,7 @@ class NFL_GPP_Simulator:
                             proj += projections[choice_idx]
                             def_opp = opponents[choice_idx][0]
                             lineup_matchups.append(matchups[choice_idx[0]])
+                            player_teams.append(teams[choice_idx][0])
                             k += 1
                         elif k >= 1:
                             remaining_salary = salary_ceiling - salary
