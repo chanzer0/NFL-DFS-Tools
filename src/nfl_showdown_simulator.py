@@ -158,7 +158,7 @@ class NFL_Showdown_Simulator:
     def get_optimal(self):
         # print(s['Name'],s['ID'])
         # print(self.player_dict)
-        #for p in self.player_dict:
+        # for p in self.player_dict:
         #    print(p,self.player_dict[p]['UniqueKey'], self.player_dict[p]['fieldFpts'], self.player_dict[p]['Salary'])
         problem = plp.LpProblem("NFL", plp.LpMaximize)
         lp_variables = {
@@ -289,16 +289,18 @@ class NFL_Showdown_Simulator:
                 players.append(key)
 
         fpts_proj = sum(self.player_dict[player]["fieldFpts"] for player in players)
-        #sal_used = sum(self.player_dict[player]["Salary"] for player in players)
-    
-        var_values = [ value.varValue for value in problem.variables() if value.varValue != 0 ]
+        # sal_used = sum(self.player_dict[player]["Salary"] for player in players)
+
+        var_values = [
+            value.varValue for value in problem.variables() if value.varValue != 0
+        ]
         player_unqiue_keys = [
             player for player in lp_variables if lp_variables[player].varValue != 0
         ]
 
-        #print((players,player_unqiue_keys, fpts_proj, sal_used,var_values))
-        #problem.writeLP("file.lp")
-        
+        # print((players,player_unqiue_keys, fpts_proj, sal_used,var_values))
+        # problem.writeLP("file.lp")
+
         self.optimal_score = float(fpts_proj)
 
     # Load player IDs for exporting
@@ -337,15 +339,23 @@ class NFL_Showdown_Simulator:
                         ]
                         self.player_dict[(player_name, pos_str, team)]["Opp"] = team_opp
                         self.player_dict[(player_name, pos_str, team)]["Matchup"] = opp
-                        self.player_dict[(player_name, pos_str, team)]["UniqueKey"] = str(row["id"])
+                        self.player_dict[(player_name, pos_str, team)][
+                            "UniqueKey"
+                        ] = str(row["id"])
                 elif self.site == "fd":
                     for position in ["CPT", "FLEX"]:
                         if (player_name, position, team) in self.player_dict:
                             if position == "CPT":
-                                self.player_dict[(player_name, position, team)]["UniqueKey"] = f'CPT:{row["id"]}'
+                                self.player_dict[(player_name, position, team)][
+                                    "UniqueKey"
+                                ] = f'CPT:{row["id"]}'
                             else:
-                                self.player_dict[(player_name, position, team)]["UniqueKey"] = f'FLEX:{row["id"]}'
-                            self.player_dict[(player_name, position, team)]["ID"] = row["id"]
+                                self.player_dict[(player_name, position, team)][
+                                    "UniqueKey"
+                                ] = f'FLEX:{row["id"]}'
+                            self.player_dict[(player_name, position, team)]["ID"] = row[
+                                "id"
+                            ]
                             self.player_dict[(player_name, position, team)][
                                 "Team"
                             ] = row[team_key]
@@ -606,7 +616,7 @@ class NFL_Showdown_Simulator:
                 self.teams_dict[team].append(player_data)
                 pos_str = "CPT"
                 if self.site == "dk":
-                    cpt_sal = 1.5*sal
+                    cpt_sal = 1.5 * sal
                 elif self.site == "fd":
                     cpt_sal = sal
                 player_data = {
@@ -701,7 +711,7 @@ class NFL_Showdown_Simulator:
                 error = False
                 if self.site == "fd":
                     un_key_lu = []
-                    i=0
+                    i = 0
                     for l in lineup:
                         ids = [self.player_dict[k]["ID"] for k in self.player_dict]
                         if l not in ids:
@@ -713,16 +723,26 @@ class NFL_Showdown_Simulator:
                             for k in self.player_dict:
                                 if self.player_dict[k]["ID"] == l:
                                     if i == 0:
-                                        if self.player_dict[k]['rosterPosition'] == 'CPT':
-                                            un_key_lu.append(self.player_dict[k]['UniqueKey'])
+                                        if (
+                                            self.player_dict[k]["rosterPosition"]
+                                            == "CPT"
+                                        ):
+                                            un_key_lu.append(
+                                                self.player_dict[k]["UniqueKey"]
+                                            )
                                         else:
                                             pass
                                     else:
-                                        if self.player_dict[k]['rosterPosition'] == 'FLEX':
-                                            un_key_lu.append(self.player_dict[k]['UniqueKey'])
+                                        if (
+                                            self.player_dict[k]["rosterPosition"]
+                                            == "FLEX"
+                                        ):
+                                            un_key_lu.append(
+                                                self.player_dict[k]["UniqueKey"]
+                                            )
                                         else:
-                                            pass                                    
-                        i+=1
+                                            pass
+                        i += 1
                 if len(lineup) < len(self.roster_construction):
                     print("lineup {} is missing players".format(i))
                     continue
@@ -939,8 +959,8 @@ class NFL_Showdown_Simulator:
 
         # Initialize problem list
         problems = self.initialize_problems_list(diff, player_data)
-        
-        #print(problems[0])
+
+        # print(problems[0])
 
         # Handle stacks logic
         # stacks = self.handle_stacks_logic(diff)
@@ -1381,7 +1401,7 @@ class NFL_Showdown_Simulator:
     def output(self):
         unique = {}
         for index, data in self.field_lineups.items():
-            #if index == 0:
+            # if index == 0:
             #    print(data)
             lineup = data["Lineup"]["Lineup"]
             lineup_data = data["Lineup"]
@@ -1398,7 +1418,9 @@ class NFL_Showdown_Simulator:
             def_opps = []
             players_vs_def = 0
 
-            player_dict_values = {v["UniqueKey"]: v for k, v in self.player_dict.items()}
+            player_dict_values = {
+                v["UniqueKey"]: v for k, v in self.player_dict.items()
+            }
 
             for player_id in lineup:
                 player_data = player_dict_values.get(player_id, {})
