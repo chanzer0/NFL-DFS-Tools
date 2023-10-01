@@ -427,7 +427,11 @@ class NFL_Optimizer:
                         if team in excluded_teams:
                             continue
 
-                        pos_key_player = self.players_by_team[team][pos_key][0]
+                        pos_key_player = self.players_by_team[team][pos_key]
+                        if len(pos_key_player) == 0:
+                            continue
+
+                        pos_key_player = pos_key_player[0]
                         opp_team = pos_key_player["Opponent"]
 
                         stack_players = []
