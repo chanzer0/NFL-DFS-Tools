@@ -3,7 +3,7 @@ import json
 import math
 import os
 import random
-import time
+import time, datetime
 import numpy as np
 import pulp as plp
 import multiprocessing as mp
@@ -1249,7 +1249,7 @@ class NFL_Showdown_Simulator:
 
     def run_tournament_simulation(self):
         print(f"Running {self.num_iterations} simulations")
-        print(len(self.field_lineups.keys()))
+        print(f"Number of unique field lineups: {len(self.field_lineups.keys())}")
 
         def generate_cpt_outcomes(flex_dict):
             cpt_dict = {}
@@ -1412,6 +1412,7 @@ class NFL_Showdown_Simulator:
             fieldFpts_p = 0
             ceil_p = 0
             own_p = []
+            own_s = []
             lu_names = []
             lu_teams = []
             cpt_tm = ""
@@ -1435,6 +1436,7 @@ class NFL_Showdown_Simulator:
                     fieldFpts_p += player_data.get("fieldFpts", 0)
                     ceil_p += player_data.get("Ceiling", 0)
                     own_p.append(player_data.get("Ownership", 0) / 100)
+                    own_s.append(player_data.get("Ownership", 0))
                     if self.site == "fd" and "CPT" in player_data["rosterPosition"]:
                         player_id = player_data.get("ID", "")
                         if player_id.endswith("69696969"):
@@ -1463,6 +1465,7 @@ class NFL_Showdown_Simulator:
                 secondary_stack = f"{stacks[0][0]} {stacks[0][1]}"
 
             own_p = np.prod(own_p)
+            own_s = np.sum(own_s)
             win_p = round(lineup_data["Wins"] / self.num_iterations * 100, 2)
             top10_p = round(lineup_data["Top10"] / self.num_iterations * 100, 2)
             cash_p = round(lineup_data["Cashes"] / self.num_iterations * 100, 2)
@@ -1474,9 +1477,9 @@ class NFL_Showdown_Simulator:
                 roi_round = round(lineup_data["ROI"] / self.num_iterations, 2)
 
             if self.use_contest_data:
-                lineup_str = f"{lu_type},{','.join(lu_names)},{salary},{fpts_p},{fieldFpts_p},{ceil_p},{primary_stack},{secondary_stack},{players_vs_def},{win_p}%,{top10_p}%,{cash_p}%,{own_p},{roi_p}%,${roi_round},{num_dupes}"
+                lineup_str = f"{lu_type},{','.join(lu_names)},{salary},{fpts_p},{fieldFpts_p},{ceil_p},{primary_stack},{secondary_stack},{players_vs_def},{win_p}%,{top10_p}%,{cash_p}%,{own_p},{own_s},{roi_p}%,${roi_round},{num_dupes}"
             else:
-                lineup_str = f"{lu_type},{','.join(lu_names)},{salary},{fpts_p},{fieldFpts_p},{ceil_p},{primary_stack},{secondary_stack},{players_vs_def},{win_p}%,{top10_p}%,{cash_p}%,{own_p},{num_dupes}"
+                lineup_str = f"{lu_type},{','.join(lu_names)},{salary},{fpts_p},{fieldFpts_p},{ceil_p},{primary_stack},{secondary_stack},{players_vs_def},{win_p}%,{top10_p}%,{cash_p}%,{own_p},{own_s},{num_dupes}"
             unique[
                 lineup_str
             ] = fpts_p  # Changed data["Fpts"] to fpts_p, which contains the accumulated Fpts
@@ -1538,35 +1541,37 @@ class NFL_Showdown_Simulator:
         unique = self.output()
 
         # First output file
+        # include timetsamp in filename, formatted as readable
+        now = datetime.datetime.now().strftime("%a_%I_%M_%S%p").lower()
         out_path = os.path.join(
             os.path.dirname(__file__),
-            "../output/{}_sd_sim_lineups_{}_{}.csv".format(
-                self.site, self.field_size, self.num_iterations
+            "../output/{}_sd_sim_lineups_{}_{}_{}.csv".format(
+                self.site, self.field_size, self.num_iterations, now
             ),
         )
         if self.site == "dk":
             if self.use_contest_data:
                 with open(out_path, "w") as f:
-                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,ROI%,ROI$,Num Dupes\n"
+                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,Proj. Own. Sum,ROI%,ROI$,Num Dupes\n"
                     f.write(header)
                     for lineup_str, fpts in unique.items():
                         f.write(f"{lineup_str}\n")
             else:
                 with open(out_path, "w") as f:
-                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,Num Dupes\n"
+                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,Proj. Own. Sum,Num Dupes\n"
                     f.write(header)
                     for lineup_str, fpts in unique.items():
                         f.write(f"{lineup_str}\n")
         else:
             if self.use_contest_data:
                 with open(out_path, "w") as f:
-                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,ROI,ROI/Entry Fee,Num Dupes\n"
+                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,Proj. Own. Sum,ROI,ROI/Entry Fee,Num Dupes\n"
                     f.write(header)
                     for lineup_str, fpts in unique.items():
                         f.write(f"{lineup_str}\n")
             else:
                 with open(out_path, "w") as f:
-                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,Num Dupes\n"
+                    header = "Type,CPT,FLEX,FLEX,FLEX,FLEX,Salary,Fpts Proj,Field Fpts Proj,Ceiling,Primary Stack,Secondary Stack,Players vs DST,Win %,Top 10%,Cash %,Proj. Own. Product,Proj. Own. Sum,Num Dupes\n"
                     f.write(header)
                     for lineup_str, fpts in unique.items():
                         f.write(f"{lineup_str}\n")
