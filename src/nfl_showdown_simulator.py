@@ -20,8 +20,9 @@ import seaborn as sns
 from numba import njit, jit
 import sys
 
-rng = np.random.Generator(np.random.PCG64())
-
+@jit(nopython=True)  
+def salary_boost(salary, max_salary):
+    return (salary / max_salary) ** 2
 
 class NFL_Showdown_Simulator:
     config = None
@@ -773,6 +774,8 @@ class NFL_Showdown_Simulator:
         current_salary,
         remaining_salary,
         k,
+        rng,
+        salary_ceiling=None,
         salary_floor=None,
         def_opp=None,
         teams=None,
@@ -799,7 +802,13 @@ class NFL_Showdown_Simulator:
             return None, None
         plyr_list = ids[valid_players]
         prob_list = ownership[valid_players] / ownership[valid_players].sum()
-        choice = rng.choice(a=plyr_list, p=prob_list)
+        if salary_ceiling:
+            boosted_salaries = np.array([salary_boost(s, salary_ceiling) for s in salaries[valid_players]])
+            boosted_probabilities = prob_list * boosted_salaries
+            boosted_probabilities /= boosted_probabilities.sum()  # normalize to ensure it sums to 1
+            choice = rng.choice(plyr_list, p=boosted_probabilities)
+        else:
+            choice = rng.choice(plyr_list,p=prob_list)
         return np.where(ids == choice)[0], choice
 
     @staticmethod
@@ -842,7 +851,7 @@ class NFL_Showdown_Simulator:
         new_player_dict,
         num_players_in_roster,
     ):
-        np.random.seed(lu_num)
+        rng = np.random.Generator(np.random.PCG64())
         lus = {}
         in_lineup.fill(0)
         iteration_count = 0
@@ -866,6 +875,8 @@ class NFL_Showdown_Simulator:
                     salary,
                     remaining_salary,
                     k,
+                    rng,
+                    salary_ceiling if k == num_players_in_roster - 1 else None,
                     salary_floor if k == num_players_in_roster - 1 else None,
                     def_opp if position_constraint else None,
                     teams if position_constraint else None,
@@ -931,7 +942,7 @@ class NFL_Showdown_Simulator:
                     "Top10": 0,
                     "ROI": 0,
                     "Cashes": 0,
-                    "Type": "generated_nostack",
+                    "Type": "generated",
                 }
                 break
         return lus
@@ -1099,7 +1110,7 @@ class NFL_Showdown_Simulator:
 
         nk = new_keys[0]
         for i, o in enumerate(output):
-            lineup_list = next(iter(o.values()))["Lineup"]
+            lineup_list = sorted(next(iter(o.values()))["Lineup"])
             lineup_set = frozenset(lineup_list)  # Convert the list to a frozenset
 
             # Keeping track of lineup duplication counts
