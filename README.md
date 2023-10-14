@@ -61,7 +61,7 @@ Where:
 
         ![Example usage](readme_images/tournament_lineups.png)
 
--   `opto_sd` for running showdown crunches, with or without randomness
+-   `sd_opto` for running showdown crunches, with or without randomness
 
 `<num_lineups>` is the number of lineups you want to generate when using the `opto` process.
 
