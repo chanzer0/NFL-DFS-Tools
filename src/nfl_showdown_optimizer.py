@@ -821,17 +821,17 @@ class NFL_Showdown_Optimizer:
                         team_stack_string[:-1],
                     )
                     if self.site == "dk"
-                    else "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{},{}".format(
-                        self.player_dict[x[0]]["Name"],
+                    else "{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{},{},{},{},{}".format(
                         self.player_dict[x[0]]["ID"],
-                        self.player_dict[x[1]]["Name"],
+                        self.player_dict[x[0]]["Name"],
                         self.player_dict[x[1]]["ID"],
-                        self.player_dict[x[2]]["Name"],
+                        self.player_dict[x[1]]["Name"],
                         self.player_dict[x[2]]["ID"],
-                        self.player_dict[x[3]]["Name"],
+                        self.player_dict[x[2]]["Name"],
                         self.player_dict[x[3]]["ID"],
-                        self.player_dict[x[4]]["Name"],
+                        self.player_dict[x[3]]["Name"],
                         self.player_dict[x[4]]["ID"],
+                        self.player_dict[x[4]]["Name"],
                         salary,
                         round(fpts_p, 2),
                         round(fpts_used, 2),

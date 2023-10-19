@@ -427,76 +427,90 @@ class NFL_Optimizer:
                         if team in excluded_teams:
                             continue
 
-                        pos_key_player = self.players_by_team[team][pos_key]
-                        if len(pos_key_player) == 0:
+                        pos_key_players = self.players_by_team[team][pos_key]
+                        if len(pos_key_players) == 0:
                             continue
 
-                        pos_key_player = pos_key_player[0]
-                        opp_team = pos_key_player["Opponent"]
+                        opp_team = pos_key_players[0]["Opponent"]
 
-                        stack_players = []
-                        if stack_type == "same-team":
-                            for pos in stack_positions:
-                                stack_players.append(self.players_by_team[team][pos])
+                        for pos_key_player in pos_key_players:
+                            stack_players = []
+                            if stack_type == "same-team":
+                                for pos in stack_positions:
+                                    stack_players.append(
+                                        self.players_by_team[team][pos]
+                                    )
 
-                        elif stack_type == "opp-team":
-                            for pos in stack_positions:
-                                stack_players.append(
-                                    self.players_by_team[opp_team][pos]
+                            elif stack_type == "opp-team":
+                                for pos in stack_positions:
+                                    stack_players.append(
+                                        self.players_by_team[opp_team][pos]
+                                    )
+
+                            elif stack_type == "same-game":
+                                for pos in stack_positions:
+                                    stack_players.append(
+                                        self.players_by_team[team][pos]
+                                    )
+                                    stack_players.append(
+                                        self.players_by_team[opp_team][pos]
+                                    )
+
+                            stack_players = self.flatten(stack_players)
+                            # player cannot exist as both pos_key_player and be present in the stack_players
+                            stack_players = [
+                                p
+                                for p in stack_players
+                                if not (
+                                    p["Name"] == pos_key_player["Name"]
+                                    and p["Position"] == pos_key_player["Position"]
+                                    and p["Team"] == pos_key_player["Team"]
                                 )
+                            ]
+                            pos_key_player_tuple = None
+                            stack_players_tuples = []
+                            for key, value in self.player_dict.items():
+                                if (
+                                    value["Name"] == pos_key_player["Name"]
+                                    and value["Position"] == pos_key_player["Position"]
+                                    and value["Team"] == pos_key_player["Team"]
+                                ):
+                                    pos_key_player_tuple = key
+                                elif (
+                                    value["Name"],
+                                    value["Position"],
+                                    value["Team"],
+                                ) in [
+                                    (player["Name"], player["Position"], player["Team"])
+                                    for player in stack_players
+                                ]:
+                                    stack_players_tuples.append(key)
 
-                        elif stack_type == "same-game":
-                            for pos in stack_positions:
-                                stack_players.append(self.players_by_team[team][pos])
-                                stack_players.append(
-                                    self.players_by_team[opp_team][pos]
+                            # [sum of stackable players] + -n*[stack_player] >= 0
+                            self.problem += (
+                                plp.lpSum(
+                                    [
+                                        lp_variables[
+                                            self.player_dict[(player, pos_str, team)][
+                                                "ID"
+                                            ]
+                                        ]
+                                        for (
+                                            player,
+                                            pos_str,
+                                            team,
+                                        ) in stack_players_tuples
+                                    ]
+                                    + [
+                                        -count
+                                        * lp_variables[
+                                            self.player_dict[pos_key_player_tuple]["ID"]
+                                        ]
+                                    ]
                                 )
-
-                        stack_players = self.flatten(stack_players)
-                        # player cannot exist as both pos_key_player and be present in the stack_players
-                        stack_players = [
-                            p
-                            for p in stack_players
-                            if not (
-                                p["Name"] == pos_key_player["Name"]
-                                and p["Position"] == pos_key_player["Position"]
-                                and p["Team"] == pos_key_player["Team"]
+                                >= 0,
+                                f"Stack rule {pos_key_player_tuple} {stack_players_tuples} {count}",
                             )
-                        ]
-                        pos_key_player_tuple = None
-                        stack_players_tuples = []
-                        for key, value in self.player_dict.items():
-                            if (
-                                value["Name"] == pos_key_player["Name"]
-                                and value["Position"] == pos_key_player["Position"]
-                                and value["Team"] == pos_key_player["Team"]
-                            ):
-                                pos_key_player_tuple = key
-                            elif (value["Name"], value["Position"], value["Team"]) in [
-                                (player["Name"], player["Position"], player["Team"])
-                                for player in stack_players
-                            ]:
-                                stack_players_tuples.append(key)
-
-                        # [sum of stackable players] + -n*[stack_player] >= 0
-                        self.problem += (
-                            plp.lpSum(
-                                [
-                                    lp_variables[
-                                        self.player_dict[(player, pos_str, team)]["ID"]
-                                    ]
-                                    for (player, pos_str, team) in stack_players_tuples
-                                ]
-                                + [
-                                    -count
-                                    * lp_variables[
-                                        self.player_dict[pos_key_player_tuple]["ID"]
-                                    ]
-                                ]
-                            )
-                            >= 0,
-                            f"Stack rule {pos_key_player_tuple} {stack_players_tuples} {count}",
-                        )
 
                 elif rule_type == "limit":
                     limit_positions = rule["positions"]  # ["RB"]
@@ -512,7 +526,12 @@ class NFL_Optimizer:
 
                     # Iterate each team, less excluded teams, and apply the rule for each key player pos
                     for team in self.players_by_team:
-                        opp_team = self.players_by_team[team]["QB"][0]["Opponent"]
+                        opp_team = self.players_by_team[team]["QB"]
+
+                        if len(opp_team) == 0:
+                            continue
+
+                        opp_team = opp_team[0]["Opponent"]
                         if team in excluded_teams:
                             continue
                         limit_players = []
@@ -845,34 +864,64 @@ class NFL_Optimizer:
                 )
                 ceil = sum([self.player_dict[player]["Ceiling"] for player in x])
                 stddev = sum([self.player_dict[player]["StdDev"] for player in x])
-                lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{},{}".format(
-                    self.player_dict[x[0]]["Name"],
-                    self.player_dict[x[0]]["ID"],
-                    self.player_dict[x[1]]["Name"],
-                    self.player_dict[x[1]]["ID"],
-                    self.player_dict[x[2]]["Name"],
-                    self.player_dict[x[2]]["ID"],
-                    self.player_dict[x[3]]["Name"],
-                    self.player_dict[x[3]]["ID"],
-                    self.player_dict[x[4]]["Name"],
-                    self.player_dict[x[4]]["ID"],
-                    self.player_dict[x[5]]["Name"],
-                    self.player_dict[x[5]]["ID"],
-                    self.player_dict[x[6]]["Name"],
-                    self.player_dict[x[6]]["ID"],
-                    self.player_dict[x[7]]["Name"],
-                    self.player_dict[x[7]]["ID"],
-                    self.player_dict[x[8]]["Name"],
-                    self.player_dict[x[8]]["ID"],
-                    salary,
-                    round(fpts_p, 2),
-                    round(fpts_used, 2),
-                    ceil,
-                    own_s,
-                    own_p,
-                    stddev,
-                    stack_str,
-                )
+                if self.site == "dk":
+                    lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{},{},{},{}".format(
+                        self.player_dict[x[0]]["Name"],
+                        self.player_dict[x[0]]["ID"],
+                        self.player_dict[x[1]]["Name"],
+                        self.player_dict[x[1]]["ID"],
+                        self.player_dict[x[2]]["Name"],
+                        self.player_dict[x[2]]["ID"],
+                        self.player_dict[x[3]]["Name"],
+                        self.player_dict[x[3]]["ID"],
+                        self.player_dict[x[4]]["Name"],
+                        self.player_dict[x[4]]["ID"],
+                        self.player_dict[x[5]]["Name"],
+                        self.player_dict[x[5]]["ID"],
+                        self.player_dict[x[6]]["Name"],
+                        self.player_dict[x[6]]["ID"],
+                        self.player_dict[x[7]]["Name"],
+                        self.player_dict[x[7]]["ID"],
+                        self.player_dict[x[8]]["Name"],
+                        self.player_dict[x[8]]["ID"],
+                        salary,
+                        round(fpts_p, 2),
+                        round(fpts_used, 2),
+                        ceil,
+                        own_s,
+                        own_p,
+                        stddev,
+                        stack_str,
+                    )
+                else:
+                    lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{},{},{},{},{}".format(
+                        self.player_dict[x[0]]["ID"],
+                        self.player_dict[x[0]]["Name"],
+                        self.player_dict[x[1]]["ID"],
+                        self.player_dict[x[1]]["Name"],
+                        self.player_dict[x[2]]["ID"],
+                        self.player_dict[x[2]]["Name"],
+                        self.player_dict[x[3]]["ID"],
+                        self.player_dict[x[3]]["Name"],
+                        self.player_dict[x[4]]["ID"],
+                        self.player_dict[x[4]]["Name"],
+                        self.player_dict[x[5]]["ID"],
+                        self.player_dict[x[5]]["Name"],
+                        self.player_dict[x[6]]["ID"],
+                        self.player_dict[x[6]]["Name"],
+                        self.player_dict[x[7]]["ID"],
+                        self.player_dict[x[7]]["Name"],
+                        self.player_dict[x[8]]["ID"],
+                        self.player_dict[x[8]]["Name"],
+                        salary,
+                        round(fpts_p, 2),
+                        round(fpts_used, 2),
+                        ceil,
+                        own_s,
+                        own_p,
+                        stddev,
+                        stack_str,
+                    )
                 f.write("%s\n" % lineup_str)
 
         print("Output done.")
