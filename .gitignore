@@ -7,6 +7,8 @@ __pycache__/
 *.so
 
 /src/aaa.py
+/src/bbb.py
+/src/parse_sims_file.py
 
 # Distribution / packaging
 .Python
