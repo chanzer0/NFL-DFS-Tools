@@ -100,7 +100,9 @@ class NFL_Showdown_Optimizer:
                         )
                         self.player_dict[(player_name, position, team)][
                             "UniqueKey"
-                        ] = int(row["id"])
+                        ] = int(row["id"])]
+                    else:
+                        print(f"Player in player_ids.csv not found in player_dict (projections.csv): {player_name} {position} {team}")
                 else:
                     if (player_name, "CPT", team) in self.player_dict:
                         matchup = row["game"]
@@ -116,6 +118,8 @@ class NFL_Showdown_Optimizer:
                         self.player_dict[(player_name, "CPT", team)][
                             "UniqueKey"
                         ] = f'CPT:{row["id"]}'
+                    else:
+                        print(f"Player in player_ids.csv not found in player_dict (projections.csv): {player_name} CPT {team}")
                     if (player_name, "FLEX", team) in self.player_dict:
                         matchup = row["game"]
                         teams = matchup.split("@")
@@ -130,6 +134,8 @@ class NFL_Showdown_Optimizer:
                         self.player_dict[(player_name, "FLEX", team)][
                             "UniqueKey"
                         ] = f'FLEX:{row["id"]}'
+                    else:
+                        print(f"Player in player_ids.csv not found in player_dict (projections.csv): {player_name} FLEX {team}")
 
     def load_rules(self):
         self.at_most = self.config["at_most"]
