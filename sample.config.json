@@ -63,6 +63,7 @@
     "matchup_at_least": {},
     "team_limits": {},
     "custom_correlations" : {
-        "Joe Burrow": {"RB": 0.69, "WR":-0.42}
+        "Brock Purdy": {"Opp QB": 0.69, "WR":-0.42},
+        "Jayden Reed" : {"Jahmyr Gibbs": 0.69, "AJ Dillon":-0.42}
     }
 }
