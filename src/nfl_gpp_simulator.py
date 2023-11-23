@@ -1756,31 +1756,29 @@ class NFL_GPP_Simulator:
 
 
     def sort_lineup_by_start_time(self, lineup):
-        # Iterate over the entire roster construction
-        for i, position in enumerate(
-            self.roster_construction
-        ):  # ['PG','SG','SF','PF','C','G','F','UTIL']
-            # Only check G, F, and UTIL positions
-            if position == 'FLEX':
-                current_player = lineup[i]
-                current_player_start_time = self.get_start_time(current_player)
+        flex_index = 8  # Assuming FLEX is at index 8
+        flex_player = lineup[flex_index]
+        flex_player_start_time = self.get_start_time(flex_player)
 
-                # Look for a swap candidate among primary positions
-                for primary_i, primary_pos in enumerate(
-                    ['RB','WR','TE']
-                ):  # Only the primary positions (0 to 4)
-                    primary_player = lineup[primary_i]
-                    primary_player_start_time = self.get_start_time(primary_player)
+        # Initialize variables to track the best swap candidate
+        latest_start_time = flex_player_start_time
+        swap_candidate_index = None
 
-                    # Check the conditions for the swap
-                    if (
-                        primary_player_start_time > current_player_start_time
-                        and self.is_valid_for_position(primary_player, i)
-                        and self.is_valid_for_position(current_player, primary_i)
-                    ):
-                        # Perform the swap
-                        lineup[i], lineup[primary_i] = lineup[primary_i], lineup[i]
-                        break  # Break out of the inner loop once a swap is made
+        # Iterate over RB, WR, and TE positions (indices 2 to 7)
+        for i in range(2, 8):
+            current_player = lineup[i]
+            current_player_start_time = self.get_start_time(current_player)
+
+            # Update the latest start time and swap candidate index
+            if current_player_start_time and current_player_start_time > latest_start_time:
+                latest_start_time = current_player_start_time
+                swap_candidate_index = i
+
+        # Perform the swap if a suitable candidate is found
+        if swap_candidate_index is not None:
+            #print(f"Swapping: {lineup[swap_candidate_index]} with {flex_player}")
+            lineup[flex_index], lineup[swap_candidate_index] = lineup[swap_candidate_index], lineup[flex_index]
+
         return lineup
 
     def update_field_lineups(self, output, diff):
