@@ -63,15 +63,15 @@ class NFL_GPP_Simulator:
     seen_lineups = {}
     seen_lineups_ix = {}
     position_map = {
-        0: ["QB"],
-        1: ["RB"],
+        0: ["DST"],
+        1: ["QB"],
         2: ["RB"],
-        3: ["WR"],
+        3: ["RB"],
         4: ["WR"],
         5: ["WR"],
-        6: ["TE"],
-        7: ["RB", "WR", "TE"],
-        8: ["DST"],
+        6: ["WR"],
+        7: ["TE"],
+        8: ["RB", "WR", "TE"],
     }
 
     def __init__(
@@ -1770,7 +1770,10 @@ class NFL_GPP_Simulator:
             current_player_start_time = self.get_start_time(current_player)
 
             # Update the latest start time and swap candidate index
-            if current_player_start_time and current_player_start_time > latest_start_time:
+            if (current_player_start_time and current_player_start_time > latest_start_time and
+                self.is_valid_for_position(flex_player, i) and
+                self.is_valid_for_position(current_player, flex_index)):
+
                 latest_start_time = current_player_start_time
                 swap_candidate_index = i
 
