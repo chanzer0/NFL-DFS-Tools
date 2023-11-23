@@ -368,6 +368,50 @@ class NFL_Showdown_Simulator:
                             ] = opp
                     self.id_name_dict[str(row["id"])] = row[name_key]
 
+    def load_correlation_rules(self):
+        if len(self.correlation_rules.keys()) > 0:
+            for primary_player in self.correlation_rules.keys():
+                # Convert primary_player to the consistent format
+                formatted_primary_player = (
+                    primary_player.replace("-", "#").lower().strip()
+                )
+                for (
+                    player_name,
+                    pos_str,
+                    team,
+                ), player_data in self.player_dict.items():
+                    if formatted_primary_player == player_name:
+                        for second_entity, correlation_value in self.correlation_rules[
+                            primary_player
+                        ].items():
+                            # Convert second_entity to the consistent format
+                            formatted_second_entity = (
+                                second_entity.replace("-", "#").lower().strip()
+                            )
+
+                            # Check if the formatted_second_entity is a player name
+                            found_second_entity = False
+                            for (
+                                se_name,
+                                se_pos_str,
+                                se_team,
+                            ), se_data in self.player_dict.items():
+                                if formatted_second_entity == se_name:
+                                    player_data["Player Correlations"][
+                                        formatted_second_entity
+                                    ] = correlation_value
+                                    se_data["Player Correlations"][
+                                        formatted_primary_player
+                                    ] = correlation_value
+                                    found_second_entity = True
+                                    break
+
+                            # If the second_entity is not found as a player, assume it's a position and update 'Correlations'
+                            if not found_second_entity:
+                                player_data["Correlations"][
+                                    second_entity
+                                ] = correlation_value
+
     def load_contest_data(self, path):
         with open(path, encoding="utf-8-sig") as file:
             reader = csv.DictReader(self.lower_first(file))
@@ -602,6 +646,7 @@ class NFL_Showdown_Simulator:
                     "Ceiling": ceil,
                     "Ownership": own,
                     "Correlations": corr,
+                    "Player Correlations": {},
                     "In Lineup": False,
                 }
                 # Check if player is in player_dict and get Opp, ID, Opp Pitcher ID and Opp Pitcher Name
@@ -634,6 +679,7 @@ class NFL_Showdown_Simulator:
                     "Ceiling": ceil,
                     "Ownership": cptOwn,
                     "Correlations": corr,
+                    "Player Correlations": {},
                     "In Lineup": False,
                 }
                 # Check if player is in player_dict and get Opp, ID, Opp Pitcher ID and Opp Pitcher Name
@@ -1142,16 +1188,39 @@ class NFL_Showdown_Simulator:
 
     def run_simulation_for_game(self, team1_id, team1, team2_id, team2, num_iterations):
         def get_corr_value(player1, player2):
-            if (
-                player1["Team"] == player2["Team"]
-                and player1["Position"][0] == player2["Position"][0]
-            ):
-                return -0.25
+            # First, check for specific player-to-player correlations
+            if player2["Name"] in player1.get("Player Correlations", {}):
+                return player1["Player Correlations"][player2["Name"]]
+
+            # If no specific correlation is found, proceed with the general logic
+            position_correlations = {
+                "QB": -0.5,
+                "RB": -0.2,
+                "WR": -0.1,
+                "TE": -0.2,
+                "K": -0.5,
+                "DST": -0.5,
+            }
+
+            if player1["Team"] == player2["Team"] and player1["Position"][0] in [
+                "QB",
+                "RB",
+                "WR",
+                "TE",
+                "K",
+                "DST",
+            ]:
+                primary_position = player1["Position"][0]
+                return position_correlations[primary_position]
+
             if player1["Team"] != player2["Team"]:
                 player_2_pos = "Opp " + str(player2["Position"][0])
             else:
                 player_2_pos = player2["Position"][0]
-            return player1["Correlations"].get(player_2_pos, 0)
+
+            return player1["Correlations"].get(
+                player_2_pos, 0
+            )  # Default to 0 if no correlation is found
 
         def build_covariance_matrix(players):
             N = len(players)
@@ -1173,6 +1242,7 @@ class NFL_Showdown_Simulator:
                         )
                         corr_matrix[i][j] = get_corr_value(players[i], players[j])
             return matrix, corr_matrix
+
 
         def ensure_positive_semidefinite(matrix):
             eigs = np.linalg.eigvals(matrix)
