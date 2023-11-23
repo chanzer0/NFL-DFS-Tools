@@ -1853,7 +1853,7 @@ class NFL_GPP_Simulator:
             position_correlations = {
                 "QB": -0.5,
                 "RB": -0.2,
-                "WR": -0.1,
+                "WR": 0.1,
                 "TE": -0.2,
                 "K": -0.5,
                 "DST": -0.5,
@@ -2392,7 +2392,7 @@ class NFL_GPP_Simulator:
         )
         with open(out_path, "w") as f:
             f.write(
-                "Player,Position,Team,Win%,Top10%,Sim. Own%,Proj. Own%,Avg. Return\n"
+                "Player,Position,Team,Win%,Top1%,Sim. Own%,Proj. Own%,Avg. Return\n"
             )
             unique_players = {}
             for val in self.field_lineups.values():
@@ -2411,15 +2411,15 @@ class NFL_GPP_Simulator:
                         unique_players[player]["Top1Percent"] = (
                             unique_players[player]["Top1Percent"] + val["Top1Percent"]
                         )
-                        unique_players[player]["In"] = unique_players[player]["In"] + 1
+                        unique_players[player]["In"] = unique_players[player]["In"] + val['Count']
                         unique_players[player]["ROI"] = (
                             unique_players[player]["ROI"] + val["ROI"]
                         )
-
+            top1PercentCount = (0.01) * self.field_size
             for player, data in unique_players.items():
                 field_p = round(data["In"] / self.field_size * 100, 2)
                 win_p = round(data["Wins"] / self.num_iterations * 100, 2)
-                top10_p = round(data["Top1Percent"] / self.num_iterations / 10 * 100, 2)
+                top10_p = round(data["Top1Percent"] / top1PercentCount / self.num_iterations  * 100, 2)
                 roi_p = round(data["ROI"] / data["In"] / self.num_iterations, 2)
                 for k, v in self.player_dict.items():
                     if player == v["ID"]:
