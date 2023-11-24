@@ -1859,14 +1859,7 @@ class NFL_GPP_Simulator:
                 "DST": -0.5,
             }
 
-            if player1["Team"] == player2["Team"] and player1["Position"][0] in [
-                "QB",
-                "RB",
-                "WR",
-                "TE",
-                "K",
-                "DST",
-            ]:
+            if player1["Team"] == player2["Team"] and player1["Position"][0] == player2["Position"][0]:
                 primary_position = player1["Position"][0]
                 return position_correlations[primary_position]
 
@@ -1947,46 +1940,46 @@ class NFL_GPP_Simulator:
         for i, player in enumerate(game):
             temp_fpts_dict[player["ID"]] = player_samples[i]
 
-        # fig, (ax1, ax2, ax3,ax4) = plt.subplots(4, figsize=(15, 25))
-        # fig.tight_layout(pad=5.0)
+        fig, (ax1, ax2, ax3,ax4) = plt.subplots(4, figsize=(15, 25))
+        fig.tight_layout(pad=5.0)
 
-        # for i, player in enumerate(game):
-        #     sns.kdeplot(player_samples[i], ax=ax1, label=player['Name'])
+        for i, player in enumerate(game):
+            sns.kdeplot(player_samples[i], ax=ax1, label=player['Name'])
 
-        # ax1.legend(loc='upper right', fontsize=14)
-        # ax1.set_xlabel('Fpts', fontsize=14)
-        # ax1.set_ylabel('Density', fontsize=14)
-        # ax1.set_title(f'Team {team1_id}{team2_id} Distributions', fontsize=14)
-        # ax1.tick_params(axis='both', which='both', labelsize=14)
+        ax1.legend(loc='upper right', fontsize=14)
+        ax1.set_xlabel('Fpts', fontsize=14)
+        ax1.set_ylabel('Density', fontsize=14)
+        ax1.set_title(f'Team {team1_id}{team2_id} Distributions', fontsize=14)
+        ax1.tick_params(axis='both', which='both', labelsize=14)
 
-        # y_min, y_max = ax1.get_ylim()
-        # ax1.set_ylim(y_min, y_max*1.1)
+        y_min, y_max = ax1.get_ylim()
+        ax1.set_ylim(y_min, y_max*1.1)
 
-        # ax1.set_xlim(-5, 50)
+        ax1.set_xlim(-5, 50)
 
-        # # # Sorting players and correlating their data
-        # player_names = [f"{player['Name']} ({player['Position']})" if player['Position'] is not None else f"{player['Name']} (P)" for player in game]
+        # # Sorting players and correlating their data
+        player_names = [f"{player['Name']} ({player['Position']})" if player['Position'] is not None else f"{player['Name']} (P)" for player in game]
 
-        # # # Ensuring the data is correctly structured as a 2D array
-        # sorted_samples_array = np.array(player_samples)
-        # if sorted_samples_array.shape[0] < sorted_samples_array.shape[1]:
-        #     sorted_samples_array = sorted_samples_array.T
+        # # Ensuring the data is correctly structured as a 2D array
+        sorted_samples_array = np.array(player_samples)
+        if sorted_samples_array.shape[0] < sorted_samples_array.shape[1]:
+            sorted_samples_array = sorted_samples_array.T
 
-        # correlation_matrix = pd.DataFrame(np.corrcoef(sorted_samples_array.T), columns=player_names, index=player_names)
+        correlation_matrix = pd.DataFrame(np.corrcoef(sorted_samples_array.T), columns=player_names, index=player_names)
 
-        # sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        # ax2.set_title(f'Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
+        sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})
+        ax2.set_title(f'Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
 
-        # original_corr_matrix = pd.DataFrame(corr_matrix, columns=player_names, index=player_names)
-        # sns.heatmap(original_corr_matrix, annot=True, ax=ax3, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        # ax3.set_title(f'Original Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
+        original_corr_matrix = pd.DataFrame(corr_matrix, columns=player_names, index=player_names)
+        sns.heatmap(original_corr_matrix, annot=True, ax=ax3, cmap='YlGnBu', cbar_kws={"shrink": .5})
+        ax3.set_title(f'Original Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
 
-        # cov_matrix = pd.DataFrame(covariance_matrix, columns=player_names, index=player_names)
-        # sns.heatmap(cov_matrix, annot=True, ax=ax4, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        # ax4.set_title(f'Original Covariance Matrix for Game {team1_id}{team2_id}', fontsize=14)
+        cov_matrix = pd.DataFrame(covariance_matrix, columns=player_names, index=player_names)
+        sns.heatmap(cov_matrix, annot=True, ax=ax4, cmap='YlGnBu', cbar_kws={"shrink": .5})
+        ax4.set_title(f'Original Covariance Matrix for Game {team1_id}{team2_id}', fontsize=14)
 
-        # plt.savefig(f'output/Team_{team1_id}{team2_id}_Distributions_Correlation.png', bbox_inches='tight')
-        # plt.close()
+        plt.savefig(f'output/Team_{team1_id}{team2_id}_Distributions_Correlation.png', bbox_inches='tight')
+        plt.close()
 
         return temp_fpts_dict
     
