@@ -279,6 +279,9 @@ class NFL_Showdown_Optimizer:
 
         # We want to create a variable for each roster slot.
         # There will be an index for each player and the variable will be binary (0 or 1) representing whether the player is included or excluded from the roster.
+        # for player in self.player_dict:
+        #     print(player)
+        #     print(self.player_dict[player]["UniqueKey"])
         lp_variables = {
             self.player_dict[player]["UniqueKey"]: plp.LpVariable(
                 str(self.player_dict[player]["UniqueKey"]),

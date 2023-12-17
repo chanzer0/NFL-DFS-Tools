@@ -182,7 +182,6 @@ class NFL_Optimizer:
                     else:
                         stddev = float(row["stddev"])
                 else:
-                    stddev = float(stddev)
                     if position == "QB":
                         stddev = fpts * self.default_qb_var
                     elif position == "DST":
