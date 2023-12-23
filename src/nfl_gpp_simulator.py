@@ -915,9 +915,9 @@ class NFL_GPP_Simulator:
                             "Type": "opto",
                             "Count" : 1
                         }
-                    j += 1
+                        j += 1
         print("loaded {} lineups".format(j))
-        # print(self.field_lineups)
+        #print(len(self.field_lineups))
 
     @staticmethod
     def generate_lineups(
