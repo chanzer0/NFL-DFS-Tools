@@ -98,9 +98,9 @@ class NFL_Showdown_Optimizer:
                         self.player_dict[(player_name, position, team)]["ID"] = int(
                             row["id"]
                         )
-                        self.player_dict[(player_name, position, team)][
-                            "UniqueKey"
-                        ] = int(row["id"])
+                        self.player_dict[(player_name, position, team)]["UniqueKey"] = (
+                            int(row["id"])
+                        )
                     else:
                         print(
                             f"Player in player_ids.csv not found in player_dict (projections.csv): {player_name} {position} {team}"
@@ -242,9 +242,11 @@ class NFL_Showdown_Optimizer:
                     "RosterPosition": "CPT",
                     "NormalPosition": position,
                     "ID": 0,
-                    "Salary": 1.5 * int(row["salary"].replace(",", ""))
-                    if self.site == "dk"
-                    else int(row["salary"].replace(",", "")),
+                    "Salary": (
+                        1.5 * int(row["salary"].replace(",", ""))
+                        if self.site == "dk"
+                        else int(row["salary"].replace(",", ""))
+                    ),
                     "Name": row["name"],
                     "Matchup": "",
                     "Team": team,
@@ -403,6 +405,7 @@ class NFL_Showdown_Optimizer:
                         if team in excluded_teams:
                             continue
 
+                        # print(team, pos_key, self.players_by_team[team])
                         pos_key_player = self.players_by_team[team][pos_key][0]
                         opp_team = pos_key_player["Opponent"]
 
