@@ -915,9 +915,9 @@ class NFL_GPP_Simulator:
                             "Type": "opto",
                             "Count" : 1
                         }
-                    j += 1
+                        j += 1
         print("loaded {} lineups".format(j))
-        # print(self.field_lineups)
+        #print(len(self.field_lineups))
 
     @staticmethod
     def generate_lineups(
@@ -1859,14 +1859,7 @@ class NFL_GPP_Simulator:
                 "DST": -0.5,
             }
 
-            if player1["Team"] == player2["Team"] and player1["Position"][0] in [
-                "QB",
-                "RB",
-                "WR",
-                "TE",
-                "K",
-                "DST",
-            ]:
+            if player1["Team"] == player2["Team"] and player1["Position"][0] == player2["Position"][0]:
                 primary_position = player1["Position"][0]
                 return position_correlations[primary_position]
 
