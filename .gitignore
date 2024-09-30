@@ -138,3 +138,4 @@ dmypy.json
 setup.py
 historical_data/*
 config.json
+_config.json

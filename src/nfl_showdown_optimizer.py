@@ -194,6 +194,12 @@ class NFL_Showdown_Optimizer:
                     float(row["fpts"]) < self.projection_minimum
                     and row["position"] != "DST"
                 ):
+                    print(
+                        row["name"]
+                        + " has a fpts of "
+                        + row["fpts"]
+                        + " and is being skipped"
+                    )
                     continue
 
                 if stddev <= 0:
