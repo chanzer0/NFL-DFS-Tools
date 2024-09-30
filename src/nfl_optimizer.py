@@ -601,17 +601,19 @@ class NFL_Optimizer:
                                     )
                             elif unless_type == "opp-team":
                                 for pos in unless_positions:
-                                    unless_players.append(
-                                        self.players_by_team[opp_team][pos]
-                                    )
+                                    if opp_team in self.players_by_team:
+                                        unless_players.append(
+                                            self.players_by_team[opp_team][pos]
+                                        )
                             elif unless_type == "same-game":
                                 for pos in unless_positions:
                                     unless_players.append(
                                         self.players_by_team[team][pos]
                                     )
-                                    unless_players.append(
-                                        self.players_by_team[opp_team][pos]
-                                    )
+                                    if opp_team in self.players_by_team:
+                                        unless_players.append(
+                                            self.players_by_team[opp_team][pos]
+                                        )
 
                             unless_players = self.flatten(unless_players)
 
