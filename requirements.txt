@@ -1,0 +1,7 @@
+###### Requirements without Version Specifiers ######
+pulp
+timedelta
+pytz
+numpy
+pandas
+json5

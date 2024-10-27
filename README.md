@@ -12,7 +12,7 @@ If you're lazy and don't like reading, you can check this video which covers _mo
 ### System requirements
 
 -   To run the tools, you will need to [install python](https://www.python.org/downloads/) if you don't already have it. These tools were bult on Python >=3.8.2, and may be incompatible with outdated versions of Python.
--   In addition to the base python installation, you will need the following packages:
+-   In addition to the base python installation, you will need the following packages, which can be installed by running `pip3 install -r requirements.txt` or manually installing them:
     -   [PuLP](https://pypi.org/project/PuLP/) - `pip install pulp`. This is the linear programming solver - the "optimizer" if you will.
     -   [timedelta](https://pypi.org/project/timedelta/) - `pip install timedelta`. This package makes it easy to interpret dates for late swaptimizing lineups.
     -   [pytz](https://pypi.org/project/pytz/) - `pip install pytz`. Another helpful package for interpreting dates and late swaptimizing
