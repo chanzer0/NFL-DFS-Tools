@@ -9,30 +9,24 @@ import pulp as plp
 import multiprocessing as mp
 import pandas as pd
 import statistics
-
+from multiprocessing import Queue
+from tqdm import tqdm
 # import fuzzywuzzy
 import itertools
 import collections
 import re
 from scipy.stats import norm, kendalltau, multivariate_normal, gamma
+from scipy.stats import nbinom, poisson, lognorm, skewnorm, exponnorm, weibull_min, gengamma
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
 from numba import jit
 import datetime
+import yaml
 
 @jit(nopython=True)
 def salary_boost(salary, max_salary):
     return (salary / max_salary) ** 2
-
-
-def salary_boost(salary, max_salary):
-    # Linear boost
-    # return salary / max_salary
-
-    # Non-linear boost (can adjust exponent for more/less emphasis)
-    return (salary / max_salary) ** 2
-
 
 class NFL_GPP_Simulator:
     config = None
@@ -73,6 +67,10 @@ class NFL_GPP_Simulator:
         7: ["TE"],
         8: ["RB", "WR", "TE"],
     }
+    # Distribution/correlation state
+    distributions_df = None
+    correlations_yaml_index = None
+    correlations_npz = None
 
     def __init__(
         self,
@@ -86,6 +84,10 @@ class NFL_GPP_Simulator:
         self.use_lineup_input = use_lineup_input
         self.load_config()
         self.load_rules()
+        # Load distribution/correlation data
+        site_name = "draftkings" if site == "dk" else "fanduel"
+        self.distributions_df = self.load_distribution_data(site_name)
+        self.correlations_yaml_index, self.correlations_npz = self.load_correlation_data(site_name)
 
         projection_path = os.path.join(
             os.path.dirname(__file__),
@@ -131,6 +133,8 @@ class NFL_GPP_Simulator:
                 "DST",
             ]
             self.salary = 50000
+            self.max_players_per_team = 8
+            self.roster_positions = ['QB', 'RB1', 'RB2', 'WR1', 'WR2', 'WR3', 'TE', 'FLEX', 'DST']
 
         elif site == "fd":
             self.roster_construction = [
@@ -145,6 +149,8 @@ class NFL_GPP_Simulator:
                 "DST",
             ]
             self.salary = 60000
+            self.max_players_per_team = 4
+            self.roster_positions = ['QB', 'RB1', 'RB2', 'WR1', 'WR2', 'WR3', 'TE', 'FLEX', 'DST']
 
         self.use_contest_data = use_contest_data
         if use_contest_data:
@@ -564,6 +570,222 @@ class NFL_GPP_Simulator:
                     )
         # print(self.payout_structure)
 
+    # ===== Distribution/correlation helpers =====
+    def load_distribution_data(self, site):
+        distribution_file = f"distribution_data/fp_distributions_{site}.csv"
+        try:
+            df = pd.read_csv(distribution_file)
+            if 'position' in df.columns:
+                df['position'] = df['position'].astype(str).str.upper()
+            if 'distribution' in df.columns:
+                df['distribution'] = df['distribution'].astype(str).str.lower()
+            return df
+        except Exception as e:
+            print(f"Failed to load distributions at {distribution_file}: {e}")
+            return None
+
+    def load_correlation_data(self, site):
+        yaml_path = f"distribution_data/fp_correlations_{site}.yaml"
+        npz_path = f"distribution_data/fp_correlations_{site}.npz"
+        yaml_index = None
+        npz_obj = None
+        if os.path.exists(yaml_path):
+            try:
+                with open(yaml_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f)
+                entries = data.get("correlations", []) if isinstance(data, dict) else []
+                yaml_index = self.index_yaml_correlations(entries)
+            except Exception as e:
+                print(f"Failed to load YAML correlations at {yaml_path}: {e}")
+        if yaml_index is None and os.path.exists(npz_path):
+            try:
+                npz_obj = np.load(npz_path)
+            except Exception as e:
+                print(f"Failed to load NPZ correlations at {npz_path}: {e}")
+        return yaml_index, npz_obj
+
+    def parse_window_range(self, window_str):
+        try:
+            s = str(window_str)
+            parts = s.split("-")
+            if len(parts) != 2:
+                return None
+            return float(parts[0]), float(parts[1])
+        except Exception:
+            return None
+
+    def index_yaml_correlations(self, entries):
+        index = {}
+        for e in entries:
+            try:
+                pos1 = str(e.get("pos1")).upper()
+                pos2 = str(e.get("pos2")).upper()
+                same_team = bool(e.get("same_team", True))
+                r1 = self.parse_window_range(e.get("win1"))
+                r2 = self.parse_window_range(e.get("win2"))
+                corr = float(e.get("correlation", 0.0))
+                if r1 is None or r2 is None:
+                    continue
+                key = (pos1, pos2, same_team)
+                index.setdefault(key, []).append((r1[0], r1[1], r2[0], r2[1], corr))
+            except Exception:
+                continue
+        return index if len(index) > 0 else None
+
+    @staticmethod
+    def get_distribution_params(distributions_df, position, projected_fp, projected_stddev=None):
+        if distributions_df is None:
+            return None
+        pos_df_full = distributions_df[distributions_df['position'] == position]
+        if len(pos_df_full) == 0:
+            return None
+
+        window_idx = 0
+        best_dist = None
+        window_start = None
+        window_end = None
+
+        if 'window_start' in pos_df_full.columns and 'window_end' in pos_df_full.columns:
+            pos_df_sorted = pos_df_full.sort_values('window_start', kind='mergesort').reset_index(drop=True)
+            found = False
+            for i, row in pos_df_sorted.iterrows():
+                ws = row['window_start']
+                we = row['window_end']
+                if ws <= projected_fp <= we:
+                    window_idx = int(i)
+                    best_dist = row
+                    window_start = ws
+                    window_end = we
+                    found = True
+                    break
+            if not found:
+                pos_df_sorted['distance'] = np.abs(pos_df_sorted['mean_input'] - projected_fp)
+                best_dist = pos_df_sorted.nsmallest(1, 'distance').iloc[0]
+                window_idx = int(best_dist.name)
+                window_start = best_dist.get('window_start')
+                window_end = best_dist.get('window_end')
+        else:
+            pos_df_sorted = pos_df_full.copy()
+            pos_df_sorted['distance'] = np.abs(pos_df_sorted['mean_input'] - projected_fp)
+            best_dist = pos_df_sorted.nsmallest(1, 'distance').iloc[0]
+            window_idx = int(best_dist.name)
+
+        base_mean = float(best_dist.get('mean', projected_fp))
+        base_variance = float(best_dist.get('variance', max(projected_fp, 1.0)))
+        dist_type = str(best_dist['distribution']).lower()
+
+        target_mean = float(projected_fp)
+        target_variance = None
+        if projected_stddev is not None and projected_stddev > 0:
+            target_variance = float(projected_stddev) ** 2
+
+        if dist_type in ('weibull', 'lognormal', 'skew_normal', 'exgaussian', 'generalized_gamma', 'shifted_gamma'):
+            params = {
+                'distribution': dist_type,
+                'window_index': window_idx,
+                'window_start': window_start,
+                'window_end': window_end,
+            }
+            for key in ['mu', 'sigma', 'tau', 'alpha', 'loc', 'scale', 'a', 'd', 'beta', 'c', 'shift']:
+                if key in best_dist and not pd.isna(best_dist[key]):
+                    params[key] = float(best_dist[key])
+            if dist_type == 'generalized_gamma' and 'c' not in params and 'd' in params:
+                params['c'] = params['d']
+            if 'mean' in best_dist and not pd.isna(best_dist['mean']):
+                params['base_mean'] = float(best_dist['mean'])
+            if 'variance' in best_dist and not pd.isna(best_dist['variance']):
+                params['base_variance'] = float(best_dist['variance'])
+            params['target_mean'] = float(projected_fp)
+            params['target_std'] = float(projected_stddev) if projected_stddev is not None else None
+            return params
+
+        if dist_type == 'gamma':
+            if target_variance is not None and target_variance > 0:
+                alpha = max(1e-6, (target_mean ** 2) / target_variance)
+                scale = max(1e-6, target_variance / target_mean)
+            else:
+                alpha = float(best_dist['alpha'])
+                scale = max(1e-6, (target_mean / alpha))
+            return {
+                'distribution': 'gamma',
+                'alpha': alpha,
+                'scale': scale,
+                'mean': alpha * scale,
+                'variance': alpha * (scale ** 2),
+                'window_index': window_idx,
+                'window_start': window_start,
+                'window_end': window_end,
+            }
+        elif dist_type in ('nbinom', 'negative_binomial'):
+            if target_variance is not None and target_variance > target_mean + 1e-6:
+                p = max(1e-6, min(1 - 1e-6, target_mean / target_variance))
+                r = max(1e-6, (target_mean ** 2) / (target_variance - target_mean))
+            else:
+                p = float(best_dist.get('p', best_dist.get('prob', 0.5)))
+                p = max(1e-6, min(1 - 1e-6, p))
+                r = max(1e-6, target_mean * p / (1 - p))
+            return {
+                'distribution': 'nbinom',
+                'r': r,
+                'n': r,
+                'p': p,
+                'mean': r * (1 - p) / p,
+                'variance': r * (1 - p) / (p ** 2),
+                'window_index': window_idx,
+                'window_start': window_start,
+                'window_end': window_end,
+            }
+        elif dist_type == 'poisson':
+            lam = max(0.0, target_mean)
+            return {
+                'distribution': 'poisson',
+                'lambda': lam,
+                'mean': lam,
+                'variance': lam,
+                'window_index': window_idx,
+                'window_start': window_start,
+                'window_end': window_end,
+            }
+        elif dist_type in ('zero_inflated_poisson', 'zip'):
+            base_pi = float(best_dist.get('pi', best_dist.get('zero_prob', 0.1)))
+            if target_variance is not None and target_variance >= target_mean and target_mean > 0:
+                ratio = max(0.0, target_variance / max(1e-6, target_mean) - 1.0)
+                denom = target_mean + max(1e-6, target_variance / max(1e-6, target_mean)) - 1.0
+                pi = max(0.0, min(0.95, ratio / max(1e-6, denom)))
+                lam = max(1e-6, target_mean / max(1e-6, (1.0 - pi)))
+            else:
+                pi = max(0.0, min(0.95, base_pi))
+                lam = max(1e-6, target_mean / max(1e-6, (1.0 - pi)))
+            adjusted_mean = (1 - pi) * lam
+            adjusted_variance = (1 - pi) * lam * (1 + pi * lam)
+            return {
+                'distribution': 'zero_inflated_poisson',
+                'pi': pi,
+                'zero_prob': pi,
+                'lambda': lam,
+                'mean': adjusted_mean,
+                'variance': adjusted_variance,
+                'window_index': window_idx,
+                'window_start': window_start,
+                'window_end': window_end,
+            }
+        elif dist_type == 'normal':
+            adjusted_mu = target_mean
+            adjusted_sigma = math.sqrt(target_variance) if (target_variance is not None and target_variance > 0) else math.sqrt(base_variance)
+            return {
+                'distribution': 'normal',
+                'mu': adjusted_mu,
+                'sigma': adjusted_sigma,
+                'mean': adjusted_mu,
+                'variance': adjusted_sigma ** 2,
+                'window_index': window_idx,
+                'window_start': window_start,
+                'window_end': window_end,
+                'original_sigma': adjusted_sigma,
+            }
+        else:
+            return None
+
     def load_correlation_rules(self):
         if len(self.correlation_rules.keys()) > 0:
             for primary_player in self.correlation_rules.keys():
@@ -648,7 +870,9 @@ class NFL_GPP_Simulator:
                         position = ["DST"]
                 if "QB" not in position and "DST" not in position:
                     position.append("FLEX")
-                pos = position[0]
+                # Choose primary (non-FLEX) position for distributions/correlations
+                primary_positions = [p for p in position if p != "FLEX"]
+                pos = primary_positions[0] if len(primary_positions) > 0 else position[0]
                 if "stddev" in row:
                     if row["stddev"] == "" or float(row["stddev"]) == 0:
                         if position == "QB":
@@ -676,71 +900,16 @@ class NFL_GPP_Simulator:
                     ceil = fpts + stddev
                 if row["salary"]:
                     sal = int(row["salary"].replace(",", ""))
-                if pos == "QB":
-                    corr = {
-                        "QB": 1,
-                        "RB": 0.08,
-                        "WR": 0.62,
-                        "TE": 0.32,
-                        "DST": -0.09,
-                        "Opp QB": 0.24,
-                        "Opp RB": 0.04,
-                        "Opp WR": 0.19,
-                        "Opp TE": 0.1,
-                        "Opp DST": -0.41,
-                    }
-                elif pos == "RB":
-                    corr = {
-                        "QB": 0.08,
-                        "RB": 1,
-                        "WR": -0.09,
-                        "TE": -0.02,
-                        "DST": 0.07,
-                        "Opp QB": 0.04,
-                        "Opp RB": -0.08,
-                        "Opp WR": 0.01,
-                        "Opp TE": 0.03,
-                        "Opp DST": -0.33,
-                    }
-                elif pos == "WR":
-                    corr = {
-                        "QB": 0.62,
-                        "RB": -0.09,
-                        "WR": 1,
-                        "TE": -0.07,
-                        "DST": -0.08,
-                        "Opp QB": 0.19,
-                        "Opp RB": 0.01,
-                        "Opp WR": 0.16,
-                        "Opp TE": 0.08,
-                        "Opp DST": -0.22,
-                    }
-                elif pos == "TE":
-                    corr = {
-                        "QB": 0.32,
-                        "RB": -0.02,
-                        "WR": -0.07,
-                        "TE": 1,
-                        "DST": -0.08,
-                        "Opp QB": 0.1,
-                        "Opp RB": 0.03,
-                        "Opp WR": 0.08,
-                        "Opp TE": 0,
-                        "Opp DST": -0.14,
-                    }
-                elif pos == "DST":
-                    corr = {
-                        "QB": -0.09,
-                        "RB": 0.07,
-                        "WR": -0.08,
-                        "TE": -0.08,
-                        "DST": 1,
-                        "Opp QB": -0.41,
-                        "Opp RB": -0.33,
-                        "Opp WR": -0.22,
-                        "Opp TE": -0.14,
-                        "Opp DST": -0.27,
-                    }
+                if stddev < 0:
+                    stddev = abs(stddev)
+                correlation_matrix = {
+                    "QB": {"QB": 1.00, "RB": 0.10, "WR": 0.36, "TE": 0.35, "K": -0.02, "DST": 0.04, "Opp QB": 0.23, "Opp RB": 0.07, "Opp WR": 0.12, "Opp TE": 0.10, "Opp K": -0.03, "Opp DST": -0.30},
+                    "RB": {"QB": 0.10, "RB": 1.00, "WR": 0.06, "TE": 0.03, "K": 0.16, "DST": 0.10, "Opp QB": 0.07, "Opp RB": -0.02, "Opp WR": 0.05, "Opp TE": 0.07, "Opp K": -0.13, "Opp DST": -0.21},
+                    "WR": {"QB": 0.36, "RB": 0.06, "WR": 1.00, "TE": 0.03, "K": 0.00, "DST": 0.06, "Opp QB": 0.12, "Opp RB": 0.05, "Opp WR": 0.05, "Opp TE": 0.06, "Opp K": 0.06, "Opp DST": -0.12},
+                    "TE": {"QB": 0.35, "RB": 0.03, "WR": 0.03, "TE": 1.00, "K": 0.02, "DST": 0.00, "Opp QB": 0.10, "Opp RB": 0.04, "Opp WR": 0.06, "Opp TE": 0.09, "Opp K": 0.00, "Opp DST": -0.03},
+                    "K": {"QB": -0.02, "RB": 0.16, "WR": 0.00, "TE": 0.02, "K": 1.00, "DST": 0.23, "Opp QB": -0.03, "Opp RB": -0.13, "Opp WR": 0.06, "Opp TE": 0.09, "Opp K": -0.04, "Opp DST": -0.32},
+                    "DST": {"QB": 0.04, "RB": 0.10, "WR": 0.06, "TE": 0.00, "K": 0.23, "DST": 1.00, "Opp QB": -0.30, "Opp RB": -0.21, "Opp WR": -0.12, "Opp TE": -0.03, "Opp K": -0.32, "Opp DST": -0.13},
+                }
                 team = row["team"]
                 if team == "LA":
                     team = "LAR"
@@ -751,6 +920,12 @@ class NFL_GPP_Simulator:
                 if own == 0:
                     own = 0.1
                 pos_str = str(position)
+                corr = correlation_matrix.get(pos, {})
+                # Attach distribution parameters based on position and projection window
+                try:
+                    dist_params = self.get_distribution_params(self.distributions_df, pos, fpts, stddev)
+                except Exception:
+                    dist_params = None
                 player_data = {
                     "Fpts": fpts,
                     "fieldFpts": fieldFpts,
@@ -759,13 +934,16 @@ class NFL_GPP_Simulator:
                     "Team": team,
                     "Opp": "",
                     "ID": "",
+                    "UniqueKey": "",
                     "Salary": int(row["salary"].replace(",", "")),
                     "StdDev": stddev,
                     "Ceiling": ceil,
                     "Ownership": own,
                     "Correlations": corr,
+                    
                     "Player Correlations": {},
                     "In Lineup": False,
+                    "Distribution": dist_params,
                 }
 
                 # Check if player is in player_dict and get Opp, ID, Opp Pitcher ID and Opp Pitcher Name
@@ -920,820 +1098,299 @@ class NFL_GPP_Simulator:
         #print(len(self.field_lineups))
 
     @staticmethod
-    def generate_lineups(
-        lu_num,
-        ids,
-        in_lineup,
-        pos_matrix,
-        ownership,
-        salary_floor,
-        salary_ceiling,
-        optimal_score,
-        salaries,
-        projections,
-        max_pct_off_optimal,
-        teams,
-        opponents,
-        team_stack,
-        stack_len,
-        overlap_limit,
-        max_stack_len,
-        matchups,
-        num_players_in_roster,
-        site,
-    ):
-        # new random seed for each lineup (without this there is a ton of dupes)
-        rng = np.random.Generator(np.random.PCG64())
-        lus = {}
-        # make sure nobody is already showing up in a lineup
-        if sum(in_lineup) != 0:
-            in_lineup.fill(0)
-        reject = True
-        iteration_count = 0
-        total_players = num_players_in_roster
-        issue = ""
-        complete = ""
-        reasonable_projection = optimal_score - (max_pct_off_optimal * optimal_score)
-        reasonable_stack_projection = optimal_score - (
-            (max_pct_off_optimal * 1.25) * optimal_score
-        )
-        max_players_per_team = 4 if site == "fd" else None
-        # reject_counters = {
-        #     "salary_too_low": 0,
-        #     "salary_too_high": 0,
-        #     "projection_too_low": 0,
-        #     "invalid_matchups": 0,
-        #     "stack_length_insufficient": 0,
-        # }
-        # print(lu_num, ' started',  team_stack, max_stack_len)
-        while reject:
-            iteration_count += 1
-            if team_stack == "":
-                salary = 0
-                proj = 0
-                if sum(in_lineup) != 0:
-                    in_lineup.fill(0)
-                lineup = []
-                player_teams = []
-                def_opps = []
-                players_opposing_def = 0
-                lineup_matchups = []
-                k = 0
-                for pos in pos_matrix.T:
-                    if k < 1:
-                        # check for players eligible for the position and make sure they arent in a lineup, returns a list of indices of available player
-                        valid_players = np.nonzero((pos > 0) & (in_lineup == 0))[0]
-                        # grab names of players eligible
-                        plyr_list = ids[valid_players]
-                        # create np array of probability of being seelcted based on ownership and who is eligible at the position
-                        prob_list = ownership[valid_players]
-                        prob_list = prob_list / prob_list.sum()
-                        try:
-                            choice = rng.choice(plyr_list, p=prob_list)
-                        except:
-                            print(plyr_list, prob_list)
-                            print("find failed on nonstack and first player selection")
-                        choice_idx = np.nonzero(ids == choice)[0]
-                        lineup.append(str(choice))
-                        in_lineup[choice_idx] = 1
-                        salary += salaries[choice_idx]
-                        proj += projections[choice_idx]
-                        def_opp = opponents[choice_idx][0]
-                        lineup_matchups.append(matchups[choice_idx[0]])
-                        player_teams.append(teams[choice_idx][0])
-                    if k >= 1:
-                        remaining_salary = salary_ceiling - salary
-                        if players_opposing_def < overlap_limit:
-                            if k == total_players - 1:
-                                valid_players = np.nonzero(
-                                    (pos > 0)
-                                    & (in_lineup == 0)
-                                    & (salaries <= remaining_salary)
-                                    & (salary + salaries >= salary_floor)
-                                )[0]
-                            else:
-                                valid_players = np.nonzero(
-                                    (pos > 0)
-                                    & (in_lineup == 0)
-                                    & (salaries <= remaining_salary)
-                                )[0]
-                            # grab names of players eligible
-                            plyr_list = ids[valid_players]
-                            # create np array of probability of being seelcted based on ownership and who is eligible at the position
-                            prob_list = ownership[valid_players]
-                            prob_list = prob_list / prob_list.sum()
-                            if k == total_players - 1:
-                                boosted_salaries = np.array(
-                                    [
-                                        salary_boost(s, salary_ceiling)
-                                        for s in salaries[valid_players]
-                                    ]
-                                )
-                                boosted_probabilities = prob_list * boosted_salaries
-                                boosted_probabilities /= (
-                                    boosted_probabilities.sum()
-                                )  # normalize to ensure it sums to 1
-                            try:
-                                if k == total_players - 1:
-                                    choice = rng.choice(
-                                        plyr_list, p=boosted_probabilities
-                                    )
-                                else:
-                                    choice = rng.choice(plyr_list, p=prob_list)
-                            except:
-                                # if remaining_salary <= np.min(salaries):
-                                #     reject_counters["salary_too_high"] += 1
-                                # else:
-                                #     reject_counters["salary_too_low"]
-                                salary = 0
-                                proj = 0
-                                if team_stack == "":
-                                    lineup = []
-                                else:
-                                    lineup = np.zeros(shape=pos_matrix.shape[1]).astype(
-                                        str
-                                    )
-                                player_teams = []
-                                def_opps = []
-                                players_opposing_def = 0
-                                lineup_matchups = []
-                                in_lineup.fill(0)  # Reset the in_lineup array
-                                k = 0  # Reset the player index
-                                continue  # Skip to the next iteration of the while loop
-                            choice_idx = np.nonzero(ids == choice)[0]
-                            lineup.append(str(choice))
-                            in_lineup[choice_idx] = 1
-                            salary += salaries[choice_idx]
-                            proj += projections[choice_idx]
-                            player_teams.append(teams[choice_idx][0])
-                            lineup_matchups.append(matchups[choice_idx[0]])
-                            if teams[choice_idx][0] == def_opp:
-                                players_opposing_def += 1
-                            if max_players_per_team is not None:
-                                team_count = Counter(player_teams)
-                                if any(
-                                    count > max_players_per_team
-                                    for count in team_count.values()
-                                ):
-                                    salary = 0
-                                    proj = 0
-                                    if team_stack == "":
-                                        lineup = []
-                                    else:
-                                        lineup = np.zeros(
-                                            shape=pos_matrix.shape[1]
-                                        ).astype(str)
-                                    player_teams = []
-                                    def_opps = []
-                                    players_opposing_def = 0
-                                    lineup_matchups = []
-                                    in_lineup.fill(0)  # Reset the in_lineup array
-                                    k = 0  # Reset the player index
-                                    continue  # Skip to the next iteration of the while loop
-                        else:
-                            if k == total_players - 1:
-                                valid_players = np.nonzero(
-                                    (pos > 0)
-                                    & (in_lineup == 0)
-                                    & (salaries <= remaining_salary)
-                                    & (salary + salaries >= salary_floor)
-                                    & (teams != def_opp)
-                                )[0]
-                            else:
-                                valid_players = np.nonzero(
-                                    (pos > 0)
-                                    & (in_lineup == 0)
-                                    & (salaries <= remaining_salary)
-                                    & (teams != def_opp)
-                                )[0]
-                            # grab names of players eligible
-                            plyr_list = ids[valid_players]
-                            # create np array of probability of being seelcted based on ownership and who is eligible at the position
-                            prob_list = ownership[valid_players]
-                            prob_list = prob_list / prob_list.sum()
-                            boosted_salaries = np.array(
-                                [
-                                    salary_boost(s, salary_ceiling)
-                                    for s in salaries[valid_players]
-                                ]
-                            )
-                            boosted_probabilities = prob_list * boosted_salaries
-                            boosted_probabilities /= (
-                                boosted_probabilities.sum()
-                            )  # normalize to ensure it sums to 1
-                            try:
-                                choice = rng.choice(plyr_list, p=boosted_probabilities)
-                            except:
-                                salary = 0
-                                proj = 0
-                                if team_stack == "":
-                                    lineup = []
-                                else:
-                                    lineup = np.zeros(shape=pos_matrix.shape[1]).astype(
-                                        str
-                                    )
-                                player_teams = []
-                                def_opps = []
-                                players_opposing_def = 0
-                                lineup_matchups = []
-                                in_lineup.fill(0)  # Reset the in_lineup array
-                                k = 0  # Reset the player index
-                                continue  # Skip to the next iteration of the while loop
-                                # if remaining_salary <= np.min(salaries):
-                                #     reject_counters["salary_too_high"] += 1
-                                # else:
-                                #     reject_counters["salary_too_low"]
-                            choice_idx = np.nonzero(ids == choice)[0]
-                            lineup.append(str(choice))
-                            in_lineup[choice_idx] = 1
-                            salary += salaries[choice_idx]
-                            proj += projections[choice_idx]
-                            player_teams.append(teams[choice_idx][0])
-                            lineup_matchups.append(matchups[choice_idx[0]])
-                            if teams[choice_idx][0] == def_opp:
-                                players_opposing_def += 1
-                            if max_players_per_team is not None:
-                                team_count = Counter(player_teams)
-                                if any(
-                                    count > max_players_per_team
-                                    for count in team_count.values()
-                                ):
-                                    salary = 0
-                                    proj = 0
-                                    if team_stack == "":
-                                        lineup = []
-                                    else:
-                                        lineup = np.zeros(
-                                            shape=pos_matrix.shape[1]
-                                        ).astype(str)
-                                    player_teams = []
-                                    def_opps = []
-                                    players_opposing_def = 0
-                                    lineup_matchups = []
-                                    in_lineup.fill(0)  # Reset the in_lineup array
-                                    k = 0  # Reset the player index
-                                    continue  # Skip to the next iteration of the while loop
-                    k += 1
-                # Must have a reasonable salary
-                # if salary > salary_ceiling:
-                #     reject_counters["salary_too_high"] += 1
-                # elif salary < salary_floor:
-                #     reject_counters["salary_too_low"] += 1
-                if salary >= salary_floor and salary <= salary_ceiling:
-                    # Must have a reasonable projection (within 60% of optimal) **people make a lot of bad lineups
-                    if proj >= reasonable_projection:
-                        if len(set(lineup_matchups)) > 1:
-                            if max_players_per_team is not None:
-                                team_count = Counter(player_teams)
-                                if all(
-                                    count <= max_players_per_team
-                                    for count in team_count.values()
-                                ):
-                                    reject = False
-                                    lus[lu_num] = {
-                                        "Lineup": lineup,
-                                        "Wins": 0,
-                                        "Top1Percent": 0,
-                                        "ROI": 0,
-                                        "Cashes": 0,
-                                        "Type": "generated",
-                                        "Count": 0
-                                    }
-                                    if len(set(lineup)) != 9:
-                                        print(
-                                            "non stack lineup dupes",
-                                            lu_num,
-                                            plyr_stack_indices,
-                                            str(lu_num),
-                                            salaries[plyr_stack_indices],
-                                            lineup,
-                                            stack_len,
-                                            team_stack,
-                                            x,
-                                        )
-                            else:
-                                reject = False
-                                lus[lu_num] = {
-                                    "Lineup": lineup,
-                                    "Wins": 0,
-                                    "Top1Percent": 0,
-                                    "ROI": 0,
-                                    "Cashes": 0,
-                                    "Type": "generated",
-                                    "Count": 0
-                                }
-                                if len(set(lineup)) != 9:
-                                    print(
-                                        "stack lineup dupes",
-                                        lu_num,
-                                        plyr_stack_indices,
-                                        str(lu_num),
-                                        salaries[plyr_stack_indices],
-                                        lineup,
-                                        stack_len,
-                                        team_stack,
-                                        x,
-                                    )
-                            # complete = 'completed'
-                            # print(str(lu_num) + ' ' + complete)
-                    #     else:
-                    #         reject_counters["invalid_matchups"] += 1
-                    # else:
-                    #     reject_counters["projection_too_low"] += 1
+    def select_player(position, ids, in_lineup, pos_matrix, ownership, salaries, projections, remaining_salary, salary_floor, rng, roster_positions, team_counts, max_players_per_team, teams, overlap_limit, opponents, salary_ceiling, num_players_remaining):
+        position_index = roster_positions.index(position)
+        valid_indices = np.where((pos_matrix[:, position_index] > 0) & (in_lineup == 0) & (salaries <= remaining_salary))[0]
+
+        if position == 'DST':
+            # Ensure DST doesn't exceed overlap limit with offensive players
+            valid_indices = [index for index in valid_indices if team_counts.get(opponents[index], 0) <= overlap_limit]
+        else:
+            # Ensure the player's team doesn't exceed max players per team
+            valid_indices = [index for index in valid_indices if team_counts[teams[index]] < max_players_per_team]
+
+        if not valid_indices:
+            return None
+
+        probabilities = ownership[valid_indices]
+        probabilities /= probabilities.sum()
+
+        chosen_index = rng.choice(valid_indices, p=probabilities)
+        chosen_id = ids[chosen_index]
+
+        return chosen_id, salaries[chosen_index], projections[chosen_index]
+
+    @staticmethod
+    def is_valid_lineup(lineup, salary, projection, salary_floor, salary_ceiling, optimal_score, max_pct_off_optimal, isStack):
+        minimum_projection = optimal_score * (1 - max_pct_off_optimal)
+        if salary < salary_floor or salary > salary_ceiling:
+            return False
+        if projection < minimum_projection:
+            return False
+        if None in lineup.values():
+            return False
+        return True
+
+    @staticmethod
+    def adjust_probabilities(salaries, ownership, salary_ceiling):
+        boosted_salaries = np.array([salary_boost(s, salary_ceiling) for s in salaries])
+        boosted_probabilities = ownership * boosted_salaries
+        boosted_probabilities /= boosted_probabilities.sum()
+        return boosted_probabilities
+
+    @staticmethod
+    def build_stack(ids, pos_matrix, teams, team_stack, ownership, stack_positions, rng, roster_positions, in_lineup, stack_len):
+        team_indices = np.where(teams == team_stack)[0]
+        
+        # Find QB
+        qb_indices = [i for i in team_indices if in_lineup[i] == 0 and pos_matrix[i][roster_positions.index('QB')] > 0]
+        if not qb_indices:
+            return [], []
+        
+        qb_index = rng.choice(qb_indices)
+        
+        # Find pass catchers (WR and TE)
+        pass_catcher_indices = [i for i in team_indices if in_lineup[i] == 0 and
+                                (any(pos_matrix[i][roster_positions.index(f'WR{j}')] > 0 for j in range(1, 4)) or
+                                pos_matrix[i][roster_positions.index('TE')] > 0)]
+        
+        if len(pass_catcher_indices) < stack_len - 1:
+            return [], []
+        
+        selected_pass_catchers = rng.choice(pass_catcher_indices, size=stack_len-1, replace=False, p=ownership[pass_catcher_indices]/np.sum(ownership[pass_catcher_indices]))
+        
+        stack_players = [ids[qb_index]] + list(ids[selected_pass_catchers])
+        
+        # Assign positions
+        slotted_positions = ['QB']
+        for idx in selected_pass_catchers:
+            if any(pos_matrix[idx][roster_positions.index(f'WR{j}')] > 0 for j in range(1, 4)):
+                available_wr_positions = [f'WR{j}' for j in range(1, 4) if f'WR{j}' not in slotted_positions]
+                slotted_positions.append(rng.choice(available_wr_positions))
             else:
-                salary = 0
-                proj = 0
-                if sum(in_lineup) != 0:
-                    in_lineup.fill(0)
-                player_teams = []
-                def_opps = []
-                lineup_matchups = []
-                filled_pos = np.zeros(shape=pos_matrix.shape[1])
-                team_stack_len = 0
-                k = 0
-                stack = True
-                lineup = np.zeros(shape=pos_matrix.shape[1]).astype(str)
-                valid_team = np.nonzero(teams == team_stack)[0]
-                # select qb
-                qb = np.unique(
-                    valid_team[np.nonzero(pos_matrix[valid_team, 1] > 0)[0]]
-                )[0]
-                salary += salaries[qb]
-                proj += projections[qb]
-                # print(salary)
-                team_stack_len += 1
-                lineup[1] = ids[qb]
-                in_lineup[qb] = 1
-                lineup_matchups.append(matchups[qb])
-                valid_players = np.unique(
-                    valid_team[np.nonzero(pos_matrix[valid_team, 4:8] > 0)[0]]
-                )
-                player_teams.append(teams[qb])
-                players_opposing_def = 0
-                plyr_list = ids[valid_players]
-                prob_list = ownership[valid_players]
-                prob_list = prob_list / prob_list.sum()
-                while stack:
-                    try:
-                        choices = rng.choice(
-                            a=plyr_list, p=prob_list, size=stack_len, replace=False
-                        )
-                        if len(set(choices)) != len(choices):
-                            print(
-                                "choice dupe",
-                                plyr_stack_indices,
-                                str(lu_num),
-                                salaries[plyr_stack_indices],
-                                lineup,
-                                stack_len,
-                                team_stack,
-                                x,
-                            )
-                    except:
-                        stack = False
-                        continue
-                    plyr_stack_indices = np.nonzero(np.in1d(ids, choices))[0]
-                    x = 0
-                    for p in plyr_stack_indices:
-                        player_placed = False
-                        for l in np.nonzero(pos_matrix[p] > 0)[0]:
-                            if lineup[l] == "0.0":
-                                lineup[l] = ids[p]
-                                lineup_matchups.append(matchups[p])
-                                player_teams.append(teams[p])
-                                x += 1
-                                player_placed = True
-                                break
-                            if player_placed:
-                                break
-                    # print(plyr_stack_indices, str(lu_num), salaries[plyr_stack_indices], lineup, stack_len, x)
-                    if x == stack_len:
-                        in_lineup[plyr_stack_indices] = 1
-                        salary += sum(salaries[plyr_stack_indices])
-                        # rint(salary)
-                        proj += sum(projections[plyr_stack_indices])
-                        # print(proj)
-                        team_stack_len += stack_len
-                        x = 0
-                        stack = False
-                    else:
-                        stack = False
-                # print(sum(in_lineup), stack_len)
-                for ix, (l, pos) in enumerate(zip(lineup, pos_matrix.T)):
-                    if l == "0.0":
-                        if k < 1:
-                            valid_players = np.nonzero(
-                                (pos > 0) & (in_lineup == 0) & (opponents != team_stack)
-                            )[0]
-                            # grab names of players eligible
-                            plyr_list = ids[valid_players]
-                            # create np array of probability of being selected based on ownership and who is eligible at the position
-                            prob_list = ownership[valid_players]
-                            prob_list = prob_list / prob_list.sum()
-                            try:
-                                choice = rng.choice(plyr_list, p=prob_list)
-                            except:
-                                print("find failed on stack and first player selection")
+                slotted_positions.append('TE')
+        
+        return stack_players, slotted_positions
+    
+    @staticmethod
+    def generate_lineups(params):
+        
+        rng = np.random.default_rng()
+        (lu_num, ids, original_in_lineup, pos_matrix, ownership, initial_salary_floor, salary_ceiling, optimal_score, salaries,
+        projections, max_pct_off_optimal, teams, opponents, team_stack, stack_len, overlap_limit,
+        max_players_per_team, site, roster_positions) = params
 
-                            #    print(k, pos)
-                            choice_idx = np.nonzero(ids == choice)[0]
-                            in_lineup[choice_idx] = 1
-                            try:
-                                lineup[ix] = str(choice)
-                            except IndexError:
-                                print(lineup, choice, ix)
-                            salary += salaries[choice_idx]
-                            proj += projections[choice_idx]
-                            def_opp = opponents[choice_idx][0]
-                            lineup_matchups.append(matchups[choice_idx[0]])
-                            player_teams.append(teams[choice_idx][0])
-                            k += 1
-                        elif k >= 1:
-                            remaining_salary = salary_ceiling - salary
-                            if players_opposing_def < overlap_limit:
-                                if k == total_players - 1:
-                                    valid_players = np.nonzero(
-                                        (pos > 0)
-                                        & (in_lineup == 0)
-                                        & (salaries <= remaining_salary)
-                                        & (salary + salaries >= salary_floor)
-                                    )[0]
-                                else:
-                                    valid_players = np.nonzero(
-                                        (pos > 0)
-                                        & (in_lineup == 0)
-                                        & (salaries <= remaining_salary)
-                                    )[0]
-                                # grab names of players eligible
-                                plyr_list = ids[valid_players]
-                                # create np array of probability of being seelcted based on ownership and who is eligible at the position
-                                prob_list = ownership[valid_players]
-                                prob_list = prob_list / prob_list.sum()
-                                if k == total_players - 1:
-                                    boosted_salaries = np.array(
-                                        [
-                                            salary_boost(s, salary_ceiling)
-                                            for s in salaries[valid_players]
-                                        ]
-                                    )
-                                    boosted_probabilities = prob_list * boosted_salaries
-                                    boosted_probabilities /= (
-                                        boosted_probabilities.sum()
-                                    )  # normalize to ensure it sums to 1
-                                try:
-                                    if k == total_players - 1:
-                                        choice = rng.choice(
-                                            plyr_list, p=boosted_probabilities
-                                        )
-                                    else:
-                                        choice = rng.choice(plyr_list, p=prob_list)
-                                except:
-                                    salary = 0
-                                    proj = 0
-                                    if team_stack == "":
-                                        lineup = []
-                                    else:
-                                        lineup = np.zeros(
-                                            shape=pos_matrix.shape[1]
-                                        ).astype(str)
-                                    player_teams = []
-                                    def_opps = []
-                                    players_opposing_def = 0
-                                    lineup_matchups = []
-                                    in_lineup.fill(0)  # Reset the in_lineup array
-                                    k = 0  # Reset the player index
-                                    continue  # Skip to the next iteration of the while loop
-                                    # if remaining_salary <= np.min(salaries):
-                                    #     reject_counters["salary_too_high"] += 1
-                                    # else:
-                                    #     reject_counters["salary_too_low"]
-                                choice_idx = np.nonzero(ids == choice)[0]
-                                try:
-                                    lineup[ix] = str(choice)
-                                except IndexError:
-                                    print(lineup, choice, ix)
-                                in_lineup[choice_idx] = 1
-                                salary += salaries[choice_idx]
-                                proj += projections[choice_idx]
-                                player_teams.append(teams[choice_idx][0])
-                                lineup_matchups.append(matchups[choice_idx[0]])
-                                if max_players_per_team is not None:
-                                    team_count = Counter(player_teams)
-                                    if any(
-                                        count > max_players_per_team
-                                        for count in team_count.values()
-                                    ):
-                                        salary = 0
-                                        proj = 0
-                                        if team_stack == "":
-                                            lineup = []
-                                        else:
-                                            lineup = np.zeros(
-                                                shape=pos_matrix.shape[1]
-                                            ).astype(str)
-                                        player_teams = []
-                                        def_opps = []
-                                        players_opposing_def = 0
-                                        lineup_matchups = []
-                                        in_lineup.fill(0)  # Reset the in_lineup array
-                                        k = 0  # Reset the player index
-                                        continue  # Skip to the next iteration of the while loop
-                                if teams[choice_idx][0] == def_opp:
-                                    players_opposing_def += 1
-                                if teams[choice_idx][0] == team_stack:
-                                    team_stack_len += 1
-                            else:
-                                if k == total_players - 1:
-                                    valid_players = np.nonzero(
-                                        (pos > 0)
-                                        & (in_lineup == 0)
-                                        & (salaries <= remaining_salary)
-                                        & (salary + salaries >= salary_floor)
-                                        & (teams != def_opp)
-                                    )[0]
-                                else:
-                                    valid_players = np.nonzero(
-                                        (pos > 0)
-                                        & (in_lineup == 0)
-                                        & (salaries <= remaining_salary)
-                                        & (teams != def_opp)
-                                    )[0]
-                                # grab names of players eligible
-                                plyr_list = ids[valid_players]
-                                # create np array of probability of being seelcted based on ownership and who is eligible at the position
-                                prob_list = ownership[valid_players]
-                                prob_list = prob_list / prob_list.sum()
-                                boosted_salaries = np.array(
-                                    [
-                                        salary_boost(s, salary_ceiling)
-                                        for s in salaries[valid_players]
-                                    ]
-                                )
-                                boosted_probabilities = prob_list * boosted_salaries
-                                boosted_probabilities /= (
-                                    boosted_probabilities.sum()
-                                )  # normalize to ensure it sums to 1
-                                try:
-                                    choice = rng.choice(
-                                        plyr_list, p=boosted_probabilities
-                                    )
-                                except:
-                                    salary = 0
-                                    proj = 0
-                                    if team_stack == "":
-                                        lineup = []
-                                    else:
-                                        lineup = np.zeros(
-                                            shape=pos_matrix.shape[1]
-                                        ).astype(str)
-                                    player_teams = []
-                                    def_opps = []
-                                    players_opposing_def = 0
-                                    lineup_matchups = []
-                                    in_lineup.fill(0)  # Reset the in_lineup array
-                                    k = 0  # Reset the player index
-                                    continue  # Skip to the next iteration of the while loop
-                                    # if remaining_salary <= np.min(salaries):
-                                    #     reject_counters["salary_too_high"] += 1
-                                    # else:
-                                    #     reject_counters["salary_too_low"]
-                                choice_idx = np.nonzero(ids == choice)[0]
-                                lineup[ix] = str(choice)
-                                in_lineup[choice_idx] = 1
-                                salary += salaries[choice_idx]
-                                proj += projections[choice_idx]
-                                player_teams.append(teams[choice_idx][0])
-                                lineup_matchups.append(matchups[choice_idx[0]])
-                                if teams[choice_idx][0] == def_opp:
-                                    players_opposing_def += 1
-                                if teams[choice_idx][0] == team_stack:
-                                    team_stack_len += 1
-                                if max_players_per_team is not None:
-                                    team_count = Counter(player_teams)
-                                    if any(
-                                        count > max_players_per_team
-                                        for count in team_count.values()
-                                    ):
-                                        salary = 0
-                                        proj = 0
-                                        if team_stack == "":
-                                            lineup = []
-                                        else:
-                                            lineup = np.zeros(
-                                                shape=pos_matrix.shape[1]
-                                            ).astype(str)
-                                        player_teams = []
-                                        def_opps = []
-                                        players_opposing_def = 0
-                                        lineup_matchups = []
-                                        in_lineup.fill(0)  # Reset the in_lineup array
-                                        k = 0  # Reset the player index
-                                        continue  # Skip to the next iteration of the while loop
-                            k += 1
-                    else:
-                        k += 1
-                # Must have a reasonable salary
-                if team_stack_len >= stack_len:
-                    if salary >= salary_floor and salary <= salary_ceiling:
-                        # loosening reasonable projection constraint for team stacks
-                        if proj >= reasonable_stack_projection:
-                            if len(set(lineup_matchups)) > 1:
-                                if max_players_per_team is not None:
-                                    team_count = Counter(player_teams)
-                                    if all(
-                                        count <= max_players_per_team
-                                        for count in team_count.values()
-                                    ):
-                                        reject = False
-                                        lus[lu_num] = {
-                                            "Lineup": lineup,
-                                            "Wins": 0,
-                                            "Top1Percent": 0,
-                                            "ROI": 0,
-                                            "Cashes": 0,
-                                            "Type": "generated",
-                                            "Count": 0,
-                                        }
-                                        if len(set(lineup)) != 9:
-                                            print(
-                                                "stack lineup dupes",
-                                                lu_num,
-                                                plyr_stack_indices,
-                                                str(lu_num),
-                                                salaries[plyr_stack_indices],
-                                                lineup,
-                                                stack_len,
-                                                team_stack,
-                                                x,
-                                            )
+        max_retries = 1000
+        salary_floor_decrement = initial_salary_floor * 0.01
+        min_projection_decrement_factor = 0.05
+        current_salary_floor = initial_salary_floor
+        current_projection_factor = 1
 
-                                else:
-                                    reject = False
-                                    lus[lu_num] = {
-                                        "Lineup": lineup,
-                                        "Wins": 0,
-                                        "Top1Percent": 0,
-                                        "ROI": 0,
-                                        "Cashes": 0,
-                                        "Type": "generated",
-                                        "Count": 0,
-                                    }
-                                    if len(set(lineup)) != 9:
-                                        print(
-                                            "stack lineup dupes",
-                                            lu_num,
-                                            plyr_stack_indices,
-                                            str(lu_num),
-                                            salaries[plyr_stack_indices],
-                                            lineup,
-                                            stack_len,
-                                            team_stack,
-                                            x,
-                                        )
-                #             else:
-                #                 reject_counters["invalid_matchups"] += 1
-                #         else:
-                #             reject_counters["projection_too_low"] += 1
-                #     else:
-                #         if salary > salary_ceiling:
-                #             reject_counters["salary_too_high"] += 1
-                #         elif salary < salary_floor:
-                #             reject_counters["salary_too_low"] += 1
-                # else:
-                #     reject_counters["stack_length_insufficient"] += 1
-        # return lus, reject_counters
-        return lus
+        for attempt in range(max_retries):
+            in_lineup = original_in_lineup.copy()
+            lineup = {position: None for position in roster_positions}
+            team_counts = {team: 0 for team in set(teams)} 
+            total_salary = 0
+            total_projection = 0
+            num_players_remaining = len(roster_positions)
+            isStack = bool(team_stack)
+
+            if attempt % 100 == 0 and attempt != 0:
+                current_salary_floor -= salary_floor_decrement
+                current_projection_factor -= min_projection_decrement_factor
+
+            # Implementing stack logic
+            if team_stack:
+                stack_players, slotted_positions = NFL_GPP_Simulator.build_stack(ids, pos_matrix, teams, team_stack, ownership, ['QB', 'WR', 'TE'], rng, roster_positions, in_lineup, stack_len)
+                if stack_players:
+                    for player_id, pos in zip(stack_players, slotted_positions):
+                        idx = np.where(ids == player_id)[0][0]
+                        lineup[pos] = player_id
+                        total_salary += salaries[idx]
+                        total_projection += projections[idx]
+                        in_lineup[idx] = 1
+                        team_counts[teams[idx]] += 1
+                        num_players_remaining -= 1
+                else:
+                    continue  # Retry if stack fails
+
+            # Fill other positions
+            shuffled_positions = list(roster_positions)
+            rng.shuffle(shuffled_positions)
+            for position in shuffled_positions:
+                if not lineup[position]:
+                    result = NFL_GPP_Simulator.select_player(position, ids, in_lineup, pos_matrix, ownership, salaries,
+                                                            projections, salary_ceiling - total_salary, current_salary_floor, rng,
+                                                            roster_positions, team_counts, max_players_per_team, teams, overlap_limit,
+                                                            opponents, salary_ceiling, num_players_remaining)
+                    if result:
+                        player_id, cost, proj = result
+                        idx = np.where(ids == player_id)[0][0]
+                        lineup[position] = player_id
+                        total_salary += cost
+                        total_projection += proj
+                        in_lineup[idx] = 1
+                        team_counts[teams[idx]] += 1
+                        num_players_remaining -= 1
+                    else:
+                        break  # No valid player found, trigger retry
+
+            if all(value is not None for value in lineup.values()) and NFL_GPP_Simulator.is_valid_lineup(
+                    lineup, total_salary, total_projection, current_salary_floor, salary_ceiling, optimal_score, current_projection_factor, isStack):
+                return {
+                    "Lineup": lineup,
+                    "Wins": 0,
+                    "Top1Percent": 0,
+                    "ROI": 0,
+                    "Cashes": 0,
+                    "Type": "generated_stack" if isStack else "generated_nostack",
+                    "Count": 1,
+                    "Ceiling": 0,
+                    "Projection": total_projection
+                }
+
+        return None
+
+
+    def setup_stacks(self, diff):
+        teams = list(self.stacks_dict.keys())
+        probabilities = [self.stacks_dict[team] for team in teams]
+        total_prob = sum(probabilities)
+        probabilities = [p / total_prob for p in probabilities]
+
+        stacks = []
+        stack_lens = []
+
+        for _ in range(diff):
+            if np.random.rand() < self.pct_field_using_stacks:
+                stack_team = np.random.choice(teams, p=probabilities)
+                stack_len = np.random.choice([2, 3], p=[1 - self.pct_field_double_stacks, self.pct_field_double_stacks])
+                stacks.append(stack_team)
+                stack_lens.append(stack_len)
+            else:
+                stacks.append('')
+                stack_lens.append(0)
+
+        return {'team': stacks, 'len': stack_lens}
 
     def generate_field_lineups(self):
         diff = self.field_size - len(self.field_lineups)
         if diff <= 0:
-            print(
-                "supplied lineups >= contest field size. only retrieving the first "
-                + str(self.field_size)
-                + " lineups"
-            )
-        else:
-            print("Generating " + str(diff) + " lineups.")
-            ids = []
-            ownership = []
-            salaries = []
-            projections = []
-            positions = []
-            teams = []
-            opponents = []
-            matchups = []
-            # put def first to make it easier to avoid overlap
-            temp_roster_construction = [
-                "DST",
-                "QB",
-                "RB",
-                "RB",
-                "WR",
-                "WR",
-                "WR",
-                "TE",
-                "FLEX",
-            ]
-            for k in self.player_dict.keys():
-                if "Team" not in self.player_dict[k].keys():
-                    print(
-                        self.player_dict[k]["Name"],
-                        " name mismatch between projections and player ids!",
-                    )
-                ids.append(self.player_dict[k]["ID"])
-                ownership.append(self.player_dict[k]["Ownership"])
-                salaries.append(self.player_dict[k]["Salary"])
-                if self.player_dict[k]["fieldFpts"] >= self.projection_minimum:
-                    projections.append(self.player_dict[k]["fieldFpts"])
-                else:
-                    projections.append(0)
-                teams.append(self.player_dict[k]["Team"])
-                opponents.append(self.player_dict[k]["Opp"])
-                matchups.append(self.player_dict[k]["Matchup"])
-                pos_list = []
-                for pos in temp_roster_construction:
-                    if pos in self.player_dict[k]["Position"]:
-                        pos_list.append(1)
-                    else:
-                        pos_list.append(0)
-                positions.append(np.array(pos_list))
-            in_lineup = np.zeros(shape=len(ids))
-            ownership = np.array(ownership)
-            salaries = np.array(salaries)
-            projections = np.array(projections)
-            pos_matrix = np.array(positions)
-            ids = np.array(ids)
-            optimal_score = self.optimal_score
-            salary_floor = self.min_lineup_salary
-            salary_ceiling = self.salary
-            max_pct_off_optimal = self.max_pct_off_optimal
-            stack_usage = self.pct_field_using_stacks
-            teams = np.array(teams)
-            opponents = np.array(opponents)
-            overlap_limit = self.overlap_limit
-            problems = []
-            stacks = np.random.binomial(n=1, p=self.pct_field_using_stacks, size=diff)
-            stack_len = np.random.choice(
-                a=[1, 2],
-                p=[1 - self.pct_field_double_stacks, self.pct_field_double_stacks],
-                size=diff,
-            )
-            max_stack_len = 2
-            num_players_in_roster = len(self.roster_construction)
-            a = list(self.stacks_dict.keys())
-            p = np.array(list(self.stacks_dict.values()))
-            probs = p / sum(p)
-            stacks = stacks.astype(str)
-            for i in range(len(stacks)):
-                if stacks[i] == "1":
-                    choice = random.choices(a, weights=probs, k=1)
-                    stacks[i] = choice[0]
-                else:
-                    stacks[i] = ""
-            # creating tuples of the above np arrays plus which lineup number we are going to create
-            for i in range(diff):
-                lu_tuple = (
-                    i,
-                    ids,
-                    in_lineup,
-                    pos_matrix,
-                    ownership,
-                    salary_floor,
-                    salary_ceiling,
-                    optimal_score,
-                    salaries,
-                    projections,
-                    max_pct_off_optimal,
-                    teams,
-                    opponents,
-                    stacks[i],
-                    stack_len[i],
-                    overlap_limit,
-                    max_stack_len,
-                    matchups,
-                    num_players_in_roster,
-                    self.site,
-                )
-                problems.append(lu_tuple)
-            start_time = time.time()
-            with mp.Pool() as pool:
-                output = pool.starmap(self.generate_lineups, problems)
-                print(
-                    "number of running processes =",
-                    pool.__dict__["_processes"]
-                    if (pool.__dict__["_state"]).upper() == "RUN"
-                    else None,
-                )
-                pool.close()
-                pool.join()
-            print("pool closed")
-            self.update_field_lineups(output,diff)
-            end_time = time.time()
-            print("lineups took " + str(end_time - start_time) + " seconds")
-            print(str(diff) + " field lineups successfully generated")
-            # print("Reject counters:", dict(overall_reject_counters))
+            print(f"Supplied lineups >= contest field size. Only retrieving the first {self.field_size} lineups")
+            return
 
-            # print(self.field_lineups)
+        print(f"Generating {diff} lineups.")
+        
+        ids = []
+        ownership = []
+        salaries = []
+        projections = []
+        positions = []
+        teams = []
+        opponents = []
+
+        temp_roster_construction = [
+            "DST",
+            "QB",
+            "RB",
+            "RB",
+            "WR",
+            "WR",
+            "WR",
+            "TE",
+            "FLEX",
+        ]
+
+        for k, player in self.player_dict.items():
+            if "Team" not in player:
+                print(f"{player['Name']} name mismatch between projections and player ids!")
+            
+            ids.append(player["ID"])
+            ownership.append(player["Ownership"])
+            salaries.append(player["Salary"])
+            projections.append(player["fieldFpts"] if player["fieldFpts"] >= self.projection_minimum else 0)
+            teams.append(player["Team"])
+            opponents.append(player["Opp"])
+            
+            pos_list = [1 if pos in player["Position"] else 0 for pos in self.roster_construction]
+            positions.append(np.array(pos_list))
+
+        ids = np.array(ids)
+        ownership = np.array(ownership)
+        salaries = np.array(salaries)
+        projections = np.array(projections)
+        pos_matrix = np.array(positions)
+        teams = np.array(teams)
+        opponents = np.array(opponents)
+
+        stack_config = self.setup_stacks(diff)
+
+        problems = [
+            (
+                i,
+                ids,
+                np.zeros(len(ids)),  # fresh in_lineup for each problem
+                pos_matrix,
+                ownership,
+                self.min_lineup_salary,
+                self.salary,
+                self.optimal_score,
+                salaries,
+                projections,
+                self.max_pct_off_optimal,
+                teams,
+                opponents,
+                stack_config['team'][i],
+                stack_config['len'][i],
+                self.overlap_limit,
+                self.max_players_per_team,
+                self.site,
+                self.roster_positions,
+            )
+            for i in range(diff)
+        ]
+
+        start_time = time.time()
+        
+        successful = mp.Value('i', 0)
+        failed = mp.Value('i', 0)
+        
+        def update_progress(result):
+            if result is not None:
+                with successful.get_lock():
+                    successful.value += 1
+            else:
+                with failed.get_lock():
+                    failed.value += 1
+        
+        with mp.Pool() as pool:
+            pbar = tqdm(total=diff, desc="Generating Lineups")
+            
+            results = []
+            for params in problems:
+                result = pool.apply_async(self.generate_lineups, (params,), callback=update_progress)
+                results.append(result)
+            
+            while any(not r.ready() for r in results):
+                completed = successful.value + failed.value
+                pbar.n = completed
+                pbar.set_postfix({'Successful': successful.value, 'Failed': failed.value})
+                pbar.refresh()
+                time.sleep(0.1)
+            
+            output = [r.get() for r in results if r.get() is not None]
+            pool.close()
+            pool.join()
+            pbar.close()
+        
+        print("Pool closed")
+
+        self.update_field_lineups(output, diff)
+        
+        end_time = time.time()
+        print(f"Lineups took {end_time - start_time} seconds")
+        print(f"{diff} field lineups successfully generated. {len(self.field_lineups)} unique lineups.")
+        print(f"{failed.value} lineups failed to generate")
 
     def get_start_time(self, player_id):
         for _, player in self.player_dict.items():
@@ -1748,39 +1405,52 @@ class NFL_GPP_Simulator:
                 return player.get(attribute, None)
         return None
 
-    def is_valid_for_position(self, player, position_idx):
-        return any(
-            pos in self.position_map[position_idx]
-            for pos in self.get_player_attribute(player, "Position")
-        )
+    def is_valid_for_position(self, player_id, position):
+        player_positions = self.get_player_attribute(player_id, "Position")
+        if player_positions is None:
+            return False
+
+        if position in ['RB1', 'RB2']:
+            return 'RB' in player_positions
+        elif position in ['WR1', 'WR2', 'WR3']:
+            return 'WR' in player_positions
+        elif position == 'TE':
+            return 'TE' in player_positions
+        elif position == 'QB':
+            return 'QB' in player_positions
+        elif position == 'DST':
+            return 'DST' in player_positions
+        elif position == 'FLEX':
+            return any(pos in player_positions for pos in ['RB', 'WR', 'TE'])
+        else:
+            print(f"Unknown position: {position}")
+            return False
 
 
     def sort_lineup_by_start_time(self, lineup):
-        flex_index = 8  # Assuming FLEX is at index 8
-        flex_player = lineup[flex_index]
+        flex_player = lineup['FLEX']
         flex_player_start_time = self.get_start_time(flex_player)
 
         # Initialize variables to track the best swap candidate
         latest_start_time = flex_player_start_time
-        swap_candidate_index = None
+        swap_candidate_position = None
 
-        # Iterate over RB, WR, and TE positions (indices 2 to 7)
-        for i in range(2, 8):
-            current_player = lineup[i]
+        # Iterate over RB, WR, and TE positions
+        for position in ['RB1', 'RB2', 'WR1', 'WR2', 'WR3', 'TE']:
+            current_player = lineup[position]
             current_player_start_time = self.get_start_time(current_player)
 
-            # Update the latest start time and swap candidate index
+            # Update the latest start time and swap candidate position
             if (current_player_start_time and current_player_start_time > latest_start_time and
-                self.is_valid_for_position(flex_player, i) and
-                self.is_valid_for_position(current_player, flex_index)):
+                self.is_valid_for_position(flex_player, position) and
+                self.is_valid_for_position(current_player, 'FLEX')):
 
                 latest_start_time = current_player_start_time
-                swap_candidate_index = i
+                swap_candidate_position = position
 
         # Perform the swap if a suitable candidate is found
-        if swap_candidate_index is not None:
-            #print(f"Swapping: {lineup[swap_candidate_index]} with {flex_player}")
-            lineup[flex_index], lineup[swap_candidate_index] = lineup[swap_candidate_index], lineup[flex_index]
+        if swap_candidate_position is not None:
+            lineup['FLEX'], lineup[swap_candidate_position] = lineup[swap_candidate_position], lineup['FLEX']
 
         return lineup
 
@@ -1788,45 +1458,38 @@ class NFL_GPP_Simulator:
         if len(self.field_lineups) == 0:
             new_keys = list(range(0, self.field_size))
         else:
-            new_keys = list(
-                range(
-                    max(self.field_lineups.keys()) + 1,
-                    max(self.field_lineups.keys()) + 1 + diff,
-                )
-            )
+            new_keys = list(range(max(self.field_lineups.keys()) + 1, max(self.field_lineups.keys()) + 1 + diff))
 
         nk = new_keys[0]
-        for i, o in enumerate(output):
-            lineup_list = sorted(next(iter(o.values()))["Lineup"])
-            lineup_set = frozenset(lineup_list)
-
-            # Keeping track of lineup duplication counts
+        for o in output:
+            # Create a frozenset of player IDs to identify unique lineups regardless of order
+            lineup_set = frozenset(o["Lineup"].values())
+            
             if lineup_set in self.seen_lineups:
+                # Increment the count for this lineup
                 self.seen_lineups[lineup_set] += 1
-
-                # Increase the count in field_lineups using the index stored in seen_lineups_ix
-                self.field_lineups[self.seen_lineups_ix[lineup_set]]["Count"] += 1
+                existing_index = self.seen_lineups_ix[lineup_set]
+                self.field_lineups[existing_index]["Count"] += 1
             else:
+                # This is a new unique lineup
                 self.seen_lineups[lineup_set] = 1
-
-                # Updating the field lineups dictionary
                 if nk in self.field_lineups.keys():
                     print("bad lineups dict, please check dk_data files")
                 else:
                     if self.site == "dk":
-                        sorted_lineup = self.sort_lineup_by_start_time(
-                            next(iter(o.values()))["Lineup"]
-                        )
+                        sorted_lineup = self.sort_lineup_by_start_time(o["Lineup"])
                     else:
-                        sorted_lineup = next(iter(o.values()))["Lineup"]
+                        sorted_lineup = o["Lineup"]
 
-
-                    self.field_lineups[nk] = next(iter(o.values()))
+                    self.field_lineups[nk] = o
                     self.field_lineups[nk]["Lineup"] = sorted_lineup
-                    self.field_lineups[nk]["Count"] += self.seen_lineups[lineup_set]
-                    # Store the new nk in seen_lineups_ix for quick access in the future
+                    self.field_lineups[nk]["Count"] = 1  # Initialize Count to 1
+                    self.field_lineups[nk]["ROI"] = 0  # Initialize ROI to 0
                     self.seen_lineups_ix[lineup_set] = nk
                     nk += 1
+
+        print(f"Total unique lineups: {len(self.field_lineups)}")
+        print(f"Total lineups including duplicates: {sum(self.seen_lineups.values())}")
 
     def calc_gamma(self, mean, sd):
         alpha = (mean / sd) ** 2
@@ -1834,152 +1497,562 @@ class NFL_GPP_Simulator:
         return alpha, beta
 
     @staticmethod
-    def run_simulation_for_game(
-        team1_id,
-        team1,
-        team2_id,
-        team2,
-        num_iterations,
-        roster_construction,
-    ):
-        # Define correlations between positions
+    def run_simulation_for_game(team1_id, team1, team2_id, team2, num_iterations, roster_construction=None, correlations_yaml_index=None, correlations_npz=None, distributions_df=None):
+        sim_rng = np.random.default_rng(seed=int(time.time() * 1000000))
+
+        def get_correlation_from_yaml_index(index, pos1, pos2, same_team, fp1, fp2):
+            if index is None:
+                return None
+            key = (pos1, pos2, same_team)
+            entries = index.get(key)
+            if not entries:
+                return None
+            matches = [corr for (a, b, c, d, corr) in entries if (a <= fp1 <= b) and (c <= fp2 <= d)]
+            if matches:
+                return float(np.mean(matches))
+            best_corr = None
+            best_dist = float('inf')
+            for a, b, c, d, corr in entries:
+                center1 = 0.5 * (a + b)
+                center2 = 0.5 * (c + d)
+                dist = abs(center1 - fp1) + abs(center2 - fp2)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_corr = corr
+            return float(best_corr) if best_corr is not None else None
 
         def get_corr_value(player1, player2):
-            # First, check for specific player-to-player correlations
-            if player2["Name"] in player1.get("Player Correlations", {}):
-                return player1["Player Correlations"][player2["Name"]]
+            # Player-to-player hard override
+            if player2.get("ID") in player1.get("Player Correlations", {}):
+                return player1["Player Correlations"][player2["ID"]], "player"
 
-            # If no specific correlation is found, proceed with the general logic
-            position_correlations = {
-                "QB": -0.5,
-                "RB": -0.2,
-                "WR": 0.1,
-                "TE": -0.2,
-                "K": -0.5,
-                "DST": -0.5,
-            }
+            pos1 = player1["Position"][0] if player1["Position"] else "FLEX"
+            pos2 = player2["Position"][0] if player2["Position"] else "FLEX"
+            same_team = player1["Team"] == player2["Team"]
+            fp1 = float(player1.get("Fpts", 0.0))
+            fp2 = float(player2.get("Fpts", 0.0))
+            w1 = int((player1.get("Distribution") or {}).get("window_index", 0))
+            w2 = int((player2.get("Distribution") or {}).get("window_index", 0))
 
-            if player1["Team"] == player2["Team"] and player1["Position"][0] == player2["Position"][0]:
-                primary_position = player1["Position"][0]
-                return position_correlations[primary_position]
+            # Prefer YAML/NPZ
+            corr = None
+            if correlations_yaml_index is not None:
+                corr = get_correlation_from_yaml_index(correlations_yaml_index, pos1, pos2, same_team, fp1, fp2)
+            if corr is not None:
+                return float(np.clip(corr, -0.95, 0.95)), "yaml"
+            if corr is None and correlations_npz is not None:
+                # Fallback: simple mean over arrays by window indices if available
+                team_suffix = 'same' if same_team else 'opp'
+                key = f"corr_{pos1}_{pos2}_{team_suffix}"
+                rev_key = f"corr_{pos2}_{pos1}_{team_suffix}"
+                arr = correlations_npz[key] if key in correlations_npz else (correlations_npz[rev_key] if rev_key in correlations_npz else None)
+                if arr is not None:
+                    try:
+                        if arr.ndim == 2:
+                            ii = int(np.clip(w1, 0, arr.shape[0] - 1))
+                            jj = int(np.clip(w2, 0, arr.shape[1] - 1))
+                            corr = float(arr[ii, jj])
+                        elif arr.ndim == 1:
+                            ii = int(np.clip(w1, 0, arr.shape[0] - 1))
+                            corr = float(arr[ii])
+                        else:
+                            corr = float(np.mean(arr))
+                    except Exception:
+                        corr = float(np.mean(arr))
+                    return float(np.clip(corr, -0.95, 0.95)), "npz"
 
-            if player1["Team"] != player2["Team"]:
-                player_2_pos = "Opp " + str(player2["Position"][0])
-            else:
-                player_2_pos = player2["Position"][0]
+            # Fallback to config-level positional correlation
+            key = pos2 if same_team else f"Opp {pos2}"
+            if "Correlations" in player1 and key in player1["Correlations"]:
+                return float(np.clip(player1["Correlations"][key], -0.95, 0.95)), "config"
+            return 0.0, "zero"
 
-            return player1["Correlations"].get(
-                player_2_pos, 0
-            )  # Default to 0 if no correlation is found
+        def generate_samples_from_distributions(players, num_iterations):
+            """Return array shape (N_players, num_iterations) using distribution params if available."""
+            samples = np.zeros((len(players), num_iterations))
+
+            def affine_match(x, target_mean, target_std):
+                if target_mean is None or target_std is None or target_std <= 0:
+                    return x
+                m = np.mean(x)
+                s = np.std(x)
+                if s <= 1e-12:
+                    return np.full_like(x, target_mean)
+                scale = target_std / s
+                shift = target_mean - scale * m
+                return shift + scale * x
+
+            for i, player in enumerate(players):
+                dist_params = player.get("Distribution")
+                if not dist_params:
+                    # Normal fallback using projections
+                    x = sim_rng.normal(loc=player["Fpts"], scale=max(1e-9, player["StdDev"]), size=num_iterations)
+                    samples[i] = x
+                    continue
+
+                d = str(dist_params.get("distribution", "normal")).lower()
+                x = None
+                if d == "gamma":
+                    x = gamma.rvs(a=float(dist_params["alpha"]), scale=float(dist_params["scale"]), size=num_iterations, random_state=None)
+                elif d == "normal":
+                    x = norm.rvs(loc=float(dist_params["mu"]), scale=max(1e-9, float(dist_params["sigma"])), size=num_iterations)
+                elif d in ("nbinom", "negative_binomial"):
+                    x = nbinom.rvs(n=float(dist_params.get("n", dist_params.get("r", 1.0))), p=float(dist_params["p"]), size=num_iterations)
+                elif d == "poisson":
+                    x = poisson.rvs(mu=float(dist_params["lambda"]), size=num_iterations)
+                elif d in ("zero_inflated_poisson", "zip"):
+                    zero_prob = float(dist_params.get("zero_prob", dist_params.get("pi", 0.0)))
+                    lam = float(dist_params["lambda"])
+                    mask = sim_rng.random(num_iterations) < zero_prob
+                    pois = poisson.rvs(mu=lam, size=num_iterations)
+                    x = np.where(mask, 0, pois)
+                elif d == "lognormal":
+                    mu = float(dist_params.get("mu", 0.0))
+                    sigma = max(1e-9, float(dist_params.get("sigma", 1.0)))
+                    x = lognorm(s=sigma, scale=np.exp(mu)).rvs(size=num_iterations)
+                elif d == "weibull":
+                    c_shape = float(dist_params.get("a", dist_params.get("c", 1.0)))
+                    scale = float(dist_params.get("scale", 1.0))
+                    x = weibull_min(c=c_shape, scale=scale).rvs(size=num_iterations)
+                elif d == "skew_normal":
+                    alpha = float(dist_params.get("alpha", 0.0))
+                    loc = float(dist_params.get("loc", 0.0))
+                    scale = max(1e-9, float(dist_params.get("scale", 1.0)))
+                    x = skewnorm(a=alpha, loc=loc, scale=scale).rvs(size=num_iterations)
+                elif d == "exgaussian":
+                    mu = float(dist_params.get("mu", 0.0))
+                    sigma = max(1e-9, float(dist_params.get("sigma", 1.0)))
+                    tau = max(1e-9, float(dist_params.get("tau", 1.0)))
+                    K = tau / sigma
+                    x = exponnorm(K=K, loc=mu, scale=sigma).rvs(size=num_iterations)
+                elif d == "generalized_gamma":
+                    a_par = float(dist_params.get("a", 1.0))
+                    c_par = float(dist_params.get("c", dist_params.get("d", 1.0)))
+                    scale = float(dist_params.get("scale", 1.0))
+                    x = gengamma(a=a_par, c=c_par, scale=scale).rvs(size=num_iterations)
+                elif d == "shifted_gamma":
+                    alpha = float(dist_params.get("alpha", 1.0))
+                    scale = float(dist_params.get("scale", 1.0))
+                    shift = float(dist_params.get("shift", 0.0))
+                    x = shift + gamma.rvs(a=alpha, scale=scale, size=num_iterations)
+                else:
+                    x = sim_rng.normal(loc=player["Fpts"], scale=max(1e-9, player["StdDev"]), size=num_iterations)
+
+                # Affine adjust to target
+                target_mean = dist_params.get("target_mean", player.get("Fpts"))
+                target_std = dist_params.get("target_std", player.get("StdDev"))
+                x = affine_match(x, target_mean, target_std)
+                samples[i] = x
+
+            return samples
 
         def build_covariance_matrix(players):
             N = len(players)
-            matrix = [[0 for _ in range(N)] for _ in range(N)]
-            corr_matrix = [[0 for _ in range(N)] for _ in range(N)]
+            corr_matrix = np.eye(N)  # Start with identity matrix (1s on diagonal)
+            source_counts = {"player": 0, "yaml": 0, "npz": 0, "config": 0, "zero": 0}
 
             for i in range(N):
-                for j in range(N):
-                    if i == j:
-                        matrix[i][j] = (
-                            players[i]["StdDev"] ** 2
-                        )  # Variance on the diagonal
-                        corr_matrix[i][j] = 1
-                    else:
-                        matrix[i][j] = (
-                            get_corr_value(players[i], players[j])
-                            * players[i]["StdDev"]
-                            * players[j]["StdDev"]
-                        )
-                        corr_matrix[i][j] = get_corr_value(players[i], players[j])
-            return matrix, corr_matrix
+                for j in range(i+1, N):  # Only compute upper triangle
+                    corr_value, src = get_corr_value(players[i], players[j])
+                    corr_matrix[i, j] = corr_value
+                    corr_matrix[j, i] = corr_value  # Ensure symmetry
+                    source_counts[src] = source_counts.get(src, 0) + 1
+
+            return corr_matrix, source_counts
 
         def ensure_positive_semidefinite(matrix):
-            eigs = np.linalg.eigvals(matrix)
-            if np.any(eigs < 0):
-                jitter = abs(min(eigs)) + 1e-6  # a small value
-                matrix += np.eye(len(matrix)) * jitter
-            return matrix
+            # Clip eigenvalues and renormalize to correlation matrix (diag=1)
+            w, v = np.linalg.eigh(matrix)
+            w[w < 1e-8] = 1e-8
+            psd = v @ np.diag(w) @ v.T
+            d = np.sqrt(np.clip(np.diag(psd), 1e-12, None))
+            psd = psd / np.outer(d, d)
+            np.fill_diagonal(psd, 1.0)
+            return psd
+
+        # Debug print
+        #print(f"Simulating game: {team1_id} vs {team2_id}")
+        #print(f"Number of players in team1: {len(team1)}")
+        #print(f"Number of players in team2: {len(team2)}")
+
+        # Filter out players with projections less than or equal to 0
+        team1 = [player for player in team1 if player['Fpts'] > 0]
+        team2 = [player for player in team2 if player['Fpts'] > 0]
 
         game = team1 + team2
-        covariance_matrix, corr_matrix = build_covariance_matrix(game)
-        # print(team1_id, team2_id)
-        # print(corr_matrix)
-        corr_matrix = np.array(corr_matrix)
+        
+        #print("Players in the game:")
+        #for player in game:
+        #    print(f"Name: {player['Name']}, Team: {player['Team']}, Position: {player['Position']}, Fpts: {player['Fpts']}, StdDev: {player['StdDev']}")
 
-        # Given eigenvalues and eigenvectors from previous code
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
+        corr_matrix, corr_source_counts = build_covariance_matrix(game)
 
-        # Set negative eigenvalues to zero
-        eigenvalues[eigenvalues < 0] = 0
+       # print("\nCorrelation Matrix:")
+       # np.set_printoptions(precision=3, suppress=True)
+       # print(corr_matrix)
 
-        # Reconstruct the matrix
-        covariance_matrix = eigenvectors.dot(np.diag(eigenvalues)).dot(eigenvectors.T)
+        # Check for symmetry
+        #if not np.allclose(corr_matrix, corr_matrix.T):
+        #    print("Warning: Correlation matrix is not symmetric")
 
+        # Check for positive semi-definiteness
+        eigenvalues = np.linalg.eigvals(corr_matrix)
+        #print("\nEigenvalues of the correlation matrix:")
+        #print(eigenvalues)
+
+        if np.any(np.real(eigenvalues) < 0):
+            min_eig = np.min(np.real(eigenvalues))
+            print(f"Warning: Correlation matrix is not positive semi-definite for {team1_id}@{team2_id}. min_eig={min_eig:.6f}")
+
+        # Ensure the correlation matrix is positive semi-definite and normalized
+        corr_matrix = ensure_positive_semidefinite(corr_matrix)
+
+        # Generate samples from distributions (new logic) and then apply correlation via Cholesky to normals
+        uncorrelated_samples = generate_samples_from_distributions(game, num_iterations)
+
+        # Apply correlation
         try:
-            samples = multivariate_normal.rvs(
-                mean=[player["Fpts"] for player in game],
-                cov=covariance_matrix,
-                size=num_iterations,
-            )
-        except:
-            print(team1_id, team2_id, "bad matrix")
+            L = np.linalg.cholesky(corr_matrix)
+            # Generate correlated normals and rank-map to preserve marginals (Iman–Conover)
+            Z = np.random.standard_normal(size=(num_iterations, uncorrelated_samples.shape[0]))
+            Z_corr = Z @ L.T
+            correlated_samples = np.empty_like(uncorrelated_samples)
+            for j in range(uncorrelated_samples.shape[0]):
+                col = uncorrelated_samples[j]
+                order = np.argsort(Z_corr[:, j])
+                sorted_col = np.sort(col)
+                correlated_samples[j][order] = sorted_col
+        except np.linalg.LinAlgError:
+            print(f"Warning: Cholesky decomposition failed for {team1_id} vs {team2_id}. Using uncorrelated samples.")
+            correlated_samples = uncorrelated_samples
 
-        player_samples = []
+        # Track trimming statistics
+        #trim_stats = []
+
+        # Ensure means match projected values after correlation
         for i, player in enumerate(game):
-            if "QB" in player["Position"]:
-                sample = samples[:, i]
-            else:
-                sample = samples[:, i]
-            # if player['Team'] in ['LAR','SEA']:
-            #     print(player['Name'], player['Fpts'], player['StdDev'], sample, np.mean(sample), np.std(sample))
-            player_samples.append(sample)
+            upper_limit = player['Fpts'] + 5 * player['StdDev']
+            
+            # Count how many samples are above the upper limit
+            samples_above_limit = np.sum(correlated_samples[i] > upper_limit)
+            
+            # Count how many samples are below zero
+            samples_below_zero = np.sum(correlated_samples[i] < 0)
+            
+            # Apply trimming
+            correlated_samples[i] = np.minimum(correlated_samples[i], upper_limit)
+            correlated_samples[i] = (correlated_samples[i] - np.mean(correlated_samples[i])) * (player['StdDev'] / np.std(correlated_samples[i])) + player['Fpts']
+            correlated_samples[i] = np.maximum(correlated_samples[i], 0)  # Ensure non-negative values
+            
+            # Calculate additional statistics
+            final_mean = np.mean(correlated_samples[i])
+            final_std = np.std(correlated_samples[i])
+            sample_min = np.min(correlated_samples[i])
+            sample_max = np.max(correlated_samples[i])
+            
+        #     # Store trimming statistics
+        #     trim_stats.append({
+        #         'Name': f"{player['Name']} ({player['Team']})",
+        #         'Position': player['Position'][0],
+        #         'Projected Mean': player['Fpts'],
+        #         'Projected StdDev': player['StdDev'],
+        #         'Final Mean': final_mean,
+        #         'Final StdDev': final_std,
+        #         'Sampled Min': sample_min,
+        #         'Sampled Max': sample_max,
+        #         'Samples Above Limit': samples_above_limit,
+        #         'Samples Below Zero': samples_below_zero,
+        #         'Percent Above Limit': (samples_above_limit / num_iterations) * 100,
+        #         'Percent Below Zero': (samples_below_zero / num_iterations) * 100
+        #     })
+
+        # # Create DataFrame and set display options
+        # pd.set_option('display.max_rows', None)
+        # pd.set_option('display.max_columns', None)
+        # pd.set_option('display.width', None)
+        # pd.set_option('display.float_format', '{:.2f}'.format)
+        
+        # trimmed_stats = pd.DataFrame(trim_stats)
+        # print(trimmed_stats)
+        
+        # # Reset display options to default
+        # pd.reset_option('display.max_rows')
+        # pd.reset_option('display.max_columns')
+        # pd.reset_option('display.width')
+        # pd.reset_option('display.float_format')
 
         temp_fpts_dict = {}
-        # print(team1_id, team2_id, len(game), uniform_samples.T.shape, len(player_samples), covariance_matrix.shape )
-
         for i, player in enumerate(game):
-            temp_fpts_dict[player["ID"]] = player_samples[i]
+            # Use player ID as the key (aligns with lineup structures)
+            temp_fpts_dict[player.get("ID", "")] = correlated_samples[i]
 
-        # fig, (ax1, ax2, ax3,ax4) = plt.subplots(4, figsize=(15, 25))
-        # fig.tight_layout(pad=5.0)
+        # # Modify the plotting code
+        # print(f"Starting to generate plots for {team1_id} vs {team2_id}")
+        # os.makedirs('simulation_plots', exist_ok=True)
 
-        # for i, player in enumerate(game):
-        #     sns.kdeplot(player_samples[i], ax=ax1, label=player['Name'])
+        # team_colors = {team1_id: 'purple', team2_id: 'red'}
+        # position_styles = {'QB': '-', 'RB': '--', 'WR': '-.', 'TE': ':', 'K': '-', 'DST': '--'}
 
-        # ax1.legend(loc='upper right', fontsize=14)
-        # ax1.set_xlabel('Fpts', fontsize=14)
-        # ax1.set_ylabel('Density', fontsize=14)
-        # ax1.set_title(f'Team {team1_id}{team2_id} Distributions', fontsize=14)
-        # ax1.tick_params(axis='both', which='both', labelsize=14)
+        # # Sort players by projected points
+        # sorted_players = sorted(enumerate(game), key=lambda x: x[1]['Fpts'], reverse=True)
 
-        # y_min, y_max = ax1.get_ylim()
-        # ax1.set_ylim(y_min, y_max*1.1)
+        # # Split players into three groups
+        # n = len(sorted_players)
+        # groups = [sorted_players[:n//3], sorted_players[n//3:2*n//3], sorted_players[2*n//3:]]
 
-        # ax1.set_xlim(-5, 50)
+        # fig, axs = plt.subplots(3, 1, figsize=(20, 30))
+        # group_names = ['High Projected', 'Medium Projected', 'Low Projected']
 
-        # # # Sorting players and correlating their data
-        # player_names = [f"{player['Name']} ({player['Position']})" if player['Position'] is not None else f"{player['Name']} (P)" for player in game]
+        # for ax, group, name in zip(axs, groups, group_names):
+        #     for i, player in group:
+        #         team = player['Team']
+        #         position = player['Position'][0]
+        #         name = player['Name']
+                
+        #         color = team_colors[team]
+        #         style = position_styles[position]
+                
+        #         sns.kdeplot(correlated_samples[i], color=color, linestyle=style, 
+        #                     label=f"{name} ({team} {position})", ax=ax, bw_adjust=1.5)
 
-        # # # Ensuring the data is correctly structured as a 2D array
-        # sorted_samples_array = np.array(player_samples)
-        # if sorted_samples_array.shape[0] < sorted_samples_array.shape[1]:
-        #     sorted_samples_array = sorted_samples_array.T
+        #     ax.set_title(f"{name} Players")
+        #     ax.set_xlabel("Fantasy Points")
+        #     ax.set_ylabel("Density")
+        #     ax.set_yscale('log')  # Use log scale for y-axis
+        #     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+        #     ax.grid(True, alpha=0.3)
 
-        # correlation_matrix = pd.DataFrame(np.corrcoef(sorted_samples_array.T), columns=player_names, index=player_names)
-
-        # sns.heatmap(correlation_matrix, annot=True, ax=ax2, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        # ax2.set_title(f'Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
-
-        # original_corr_matrix = pd.DataFrame(corr_matrix, columns=player_names, index=player_names)
-        # sns.heatmap(original_corr_matrix, annot=True, ax=ax3, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        # ax3.set_title(f'Original Correlation Matrix for Game {team1_id}{team2_id}', fontsize=14)
-
-        # cov_matrix = pd.DataFrame(covariance_matrix, columns=player_names, index=player_names)
-        # sns.heatmap(cov_matrix, annot=True, ax=ax4, cmap='YlGnBu', cbar_kws={"shrink": .5})
-        # ax4.set_title(f'Original Covariance Matrix for Game {team1_id}{team2_id}', fontsize=14)
-
-        # plt.savefig(f'output/Team_{team1_id}{team2_id}_Distributions_Correlation.png', bbox_inches='tight')
+        # plt.tight_layout()
+        # distribution_plot_path = f'simulation_plots/{team1_id}_vs_{team2_id}_distributions.png'
+        # plt.savefig(distribution_plot_path, dpi=300, bbox_inches='tight')
         # plt.close()
+        # print(f"Saved distribution plot to {distribution_plot_path}")
+
+
+
+        # # Plot default correlation matrix
+        # plt.figure(figsize=(20, 18))
+        # sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, 
+        #             annot_kws={'size': 8}, fmt='.2f')
+        # plt.title("Default Player Correlations")
+        
+        # # Adjust labels for correlation matrix
+        # player_labels = [f"{player['Name']} ({player['Team']})" for player in game]
+        # plt.xticks(np.arange(len(player_labels)) + 0.5, player_labels, rotation=90, ha='right', fontsize=8)
+        # plt.yticks(np.arange(len(player_labels)) + 0.5, player_labels, rotation=0, fontsize=8)
+
+        # plt.tight_layout()
+        # default_corr_plot_path = f'simulation_plots/{team1_id}_vs_{team2_id}_default_correlations.png'
+        # plt.savefig(default_corr_plot_path, dpi=300, bbox_inches='tight')
+        # plt.close()
+        # print(f"Saved default correlation plot to {default_corr_plot_path}")
+
+        # # Calculate and plot the correlation matrix of the correlated samples
+        # sample_corr_matrix = np.corrcoef(correlated_samples)
+        
+        # plt.figure(figsize=(20, 18))
+        # sns.heatmap(sample_corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, 
+        #             annot_kws={'size': 8}, fmt='.2f')
+        # plt.title("Sampled Player Correlations")
+        
+        # # Use the same player labels as before
+        # plt.xticks(np.arange(len(player_labels)) + 0.5, player_labels, rotation=90, ha='right', fontsize=8)
+        # plt.yticks(np.arange(len(player_labels)) + 0.5, player_labels, rotation=0, fontsize=8)
+
+        # plt.tight_layout()
+        # sample_corr_plot_path = f'simulation_plots/{team1_id}_vs_{team2_id}_sampled_correlations.png'
+        # plt.savefig(sample_corr_plot_path, dpi=300, bbox_inches='tight')
+        # plt.close()
+        # print(f"Saved sampled correlation plot to {sample_corr_plot_path}")
+
+        # # Create a dataframe with player statistics and trimming info
+        # player_stats = []
+        # for i, player in enumerate(game):
+        #     samples = correlated_samples[i]
+        #     stats = {
+        #         'Name': f"{player['Name']} ({player['Team']})",
+        #         'Position': player['Position'][0],
+        #         'Projected Mean': player['Fpts'],
+        #         'Projected StdDev': player['StdDev'],
+        #         'Sampled Mean': np.mean(samples),
+        #         'Sampled StdDev': np.std(samples),
+        #         'Sampled Median': np.median(samples),
+        #         'Sampled Min': np.min(samples),
+        #         'Sampled Max': np.max(samples),
+        #         'Percent Above Limit': trim_stats[i]['Percent Above Limit'],
+        #         'Percent Below Zero': trim_stats[i]['Percent Below Zero']
+        #     }
+        #     player_stats.append(stats)
+
+        # stats_df = pd.DataFrame(player_stats)
+
+        # # Plot the statistics table including trimming info
+        # plt.figure(figsize=(20, len(game) * 0.5))
+        # plt.axis('off')
+        # table = plt.table(cellText=stats_df.values,
+        #                 colLabels=stats_df.columns,
+        #                 cellLoc='center',
+        #                 loc='center')
+        # table.auto_set_font_size(False)
+        # table.set_fontsize(8)
+        # table.scale(1, 1.5)
+        # plt.title("Player Statistics and Trimming Information", fontsize=16)
+        
+        # stats_plot_path = f'simulation_plots/{team1_id}_vs_{team2_id}_player_stats_and_trimming.png'
+        # plt.savefig(stats_plot_path, dpi=300, bbox_inches='tight')
+        # plt.close()
+        # print(f"Saved player statistics and trimming plot to {stats_plot_path}")
+
+        # ---- GPP: Per-game plots and summary (mirror showdown implementation) ----
+        # try:
+        #     # Labels and sorting
+        #     def short_label(p):
+        #         # Use last name only to keep labels compact
+        #         raw = str(p.get('Name', ''))
+        #         nm = raw.replace('#', ' ').split()[-1]
+        #         pos = p['Position'][0] if p['Position'] else 'P'
+        #         tm = p['Team']
+        #         return f"{tm}-{pos}-{nm}"
+
+        #     labels_unsorted = [short_label(p) for p in game]
+        #     order = sorted(range(len(game)), key=lambda i: (game[i]['Team'], (game[i]['Position'] or ['Z'])[0], game[i]['Name']))
+
+        #     samples_mat = correlated_samples.T  # (num_iters, num_players)
+        #     samples_sorted = samples_mat[:, order]
+        #     corr_actual = np.corrcoef(samples_sorted, rowvar=False)
+        #     corr_input_sorted = corr_matrix[np.ix_(order, order)]
+
+        #     fig = plt.figure(figsize=(22, 20))
+        #     gs = fig.add_gridspec(3, 2, height_ratios=[1.2, 1.0, 1.0])
+
+        #     ax1 = fig.add_subplot(gs[0, :])
+        #     for i in range(len(game)):
+        #         sns.kdeplot(correlated_samples[i], ax=ax1, label=game[i]['Name'], linewidth=1.1, alpha=0.7)
+        #     ax1.legend(loc='upper right', fontsize=10, ncol=2)
+        #     ax1.set_xlabel('Fpts')
+        #     ax1.set_ylabel('Density')
+        #     ax1.set_title(f'GPP {team1_id}@{team2_id} Player Distributions')
+        #     ax1.set_xlim(-5, 60)
+
+        #     ax2 = fig.add_subplot(gs[1, 0])
+        #     labels_sorted = [labels_unsorted[i] for i in order]
+        #     # Show only lower triangle to reduce clutter
+        #     mask_actual = np.triu(np.ones_like(corr_actual, dtype=bool), k=1)
+        #     sns.heatmap(
+        #         corr_actual,
+        #         mask=mask_actual,
+        #         ax=ax2,
+        #         cmap='coolwarm', vmin=-0.35, vmax=0.35,
+        #         annot=True, fmt='.2f', annot_kws={'size':10}, cbar_kws={'shrink':0.6},
+        #         square=True, linewidths=0.5, linecolor='white'
+        #     )
+        #     ax2.set_xticks(np.arange(len(labels_sorted)) + 0.5)
+        #     ax2.set_yticks(np.arange(len(labels_sorted)) + 0.5)
+        #     ax2.set_xticklabels(labels_sorted, rotation=70, ha='right', fontsize=8)
+        #     ax2.set_yticklabels(labels_sorted, fontsize=9)
+        #     ax2.set_title(f'Actual Correlation Matrix for GPP {team1_id}@{team2_id}')
+        #     # Team boundary lines
+        #     team_order = [game[i]['Team'] for i in order]
+        #     boundaries = [idx for idx in range(1, len(team_order)) if team_order[idx] != team_order[idx-1]]
+        #     for b in boundaries:
+        #         ax2.axhline(b, color='black', lw=0.6)
+        #         ax2.axvline(b, color='black', lw=0.6)
+
+        #     ax3 = fig.add_subplot(gs[1, 1])
+        #     mask_input = np.triu(np.ones_like(corr_input_sorted, dtype=bool), k=1)
+        #     sns.heatmap(
+        #         corr_input_sorted,
+        #         mask=mask_input,
+        #         ax=ax3,
+        #         cmap='coolwarm', vmin=-0.35, vmax=0.35,
+        #         annot=True, fmt='.2f', annot_kws={'size':10}, cbar_kws={'shrink':0.6},
+        #         square=True, linewidths=0.5, linecolor='white'
+        #     )
+        #     ax3.set_xticks(np.arange(len(labels_sorted)) + 0.5)
+        #     ax3.set_yticks(np.arange(len(labels_sorted)) + 0.5)
+        #     ax3.set_xticklabels(labels_sorted, rotation=70, ha='right', fontsize=8)
+        #     ax3.set_yticklabels(labels_sorted, fontsize=9)
+        #     ax3.set_title(f'Input Correlation Matrix for GPP {team1_id}@{team2_id}')
+        #     for b in boundaries:
+        #         ax3.axhline(b, color='black', lw=0.6)
+        #         ax3.axvline(b, color='black', lw=0.6)
+
+        #     ax4 = fig.add_subplot(gs[2, :])
+        #     ax4.text(0.02, 0.95, 'Distribution Summary:', transform=ax4.transAxes, fontsize=14, weight='bold')
+        #     y_pos = 0.88
+        #     for p in game:
+        #         dist_params = p.get('Distribution')
+        #         if dist_params:
+        #             d = dist_params.get('distribution', 'dist')
+        #             summary = f"{p['Name']}: {d}"
+        #         else:
+        #             summary = f"{p['Name']}: Normal fallback (μ={p['Fpts']:.2f}, σ={p['StdDev']:.2f})"
+        #         ax4.text(0.02, y_pos, summary, transform=ax4.transAxes, fontsize=9)
+        #         y_pos -= 0.06
+        #         if y_pos < 0.05:
+        #             break
+        #     # Correlation source summary in the figure footer
+        #     src_txt = (
+        #         f"Corr sources → YAML: {corr_source_counts.get('yaml',0)}, NPZ: {corr_source_counts.get('npz',0)}, "
+        #         f"Player: {corr_source_counts.get('player',0)}, Config: {corr_source_counts.get('config',0)}, Zero: {corr_source_counts.get('zero',0)}"
+        #     )
+        #     ax4.text(0.02, 0.05, src_txt, transform=ax4.transAxes, fontsize=9, style='italic')
+        #     ax4.axis('off')
+
+        #     out_dir = os.path.join(os.path.dirname(__file__), "../output/gpp_plots")
+        #     os.makedirs(out_dir, exist_ok=True)
+        #     plot_path = os.path.join(out_dir, f"{team1_id}_vs_{team2_id}_plots.png")
+        #     try:
+        #         fig.tight_layout()
+        #         try:
+        #             fig.canvas.draw()
+        #         except Exception:
+        #             pass
+        #         fig.savefig(plot_path, dpi=220, bbox_inches='tight', facecolor='white')
+        #         print(f"GPP plot saved: {plot_path}")
+        #     finally:
+        #         plt.close(fig)
+
+        #     try:
+        #         summary_rows = []
+        #         for i, p in enumerate(game):
+        #             s = correlated_samples[i]
+        #             dist_params = p.get('Distribution') or {}
+        #             row = {
+        #                 'Name': p.get('Name', ''),
+        #                 'Team': p.get('Team', ''),
+        #                 'Position': (p.get('Position') or ['P'])[0],
+        #                 'ProjectedMean': float(p.get('Fpts', 0.0)),
+        #                 'ProjectedStd': float(p.get('StdDev', 0.0)),
+        #                 'DistType': str(dist_params.get('distribution', 'normal_fallback')),
+        #                 'WindowIndex': int(dist_params.get('window_index', -1)) if isinstance(dist_params.get('window_index', -1), (int, float)) else -1,
+        #                 'WindowStart': dist_params.get('window_start'),
+        #                 'WindowEnd': dist_params.get('window_end'),
+        #                 'SampleMean': float(np.mean(s)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleStd': float(np.std(s)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleMin': float(np.min(s)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleP01': float(np.quantile(s, 0.01)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleP05': float(np.quantile(s, 0.05)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleMedian': float(np.median(s)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleP95': float(np.quantile(s, 0.95)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleP99': float(np.quantile(s, 0.99)) if s is not None and len(s) > 0 else np.nan,
+        #                 'SampleMax': float(np.max(s)) if s is not None and len(s) > 0 else np.nan,
+        #             }
+        #             for key in ['alpha','scale','mu','sigma','tau','loc','a','c','d','shift','lambda','pi','zero_prob','p','r','n','base_mean','base_variance','target_mean','target_std']:
+        #                 if key in dist_params:
+        #                     try:
+        #                         row[f'param_{key}'] = float(dist_params[key])
+        #                     except Exception:
+        #                         row[f'param_{key}'] = dist_params[key]
+        #             summary_rows.append(row)
+        #         summary_df = pd.DataFrame(summary_rows)
+        #         summary_path = os.path.join(out_dir, f"{team1_id}_vs_{team2_id}_summary.csv")
+        #         summary_df.to_csv(summary_path, index=False)
+        #         print(f"GPP summary CSV written: {summary_path}")
+        #     except Exception as e:
+        #         print(f"Failed to write GPP summary CSV: {e}")
+        # except Exception as e:
+        #     print(f"Failed to create GPP plots/summary for {team1_id}@{team2_id}: {e}")
 
         return temp_fpts_dict
     
@@ -2037,13 +2110,20 @@ class NFL_GPP_Simulator:
                     self.teams_dict[m[1]],
                     self.num_iterations,
                     self.roster_construction,
+                    self.correlations_yaml_index,
+                    self.correlations_npz,
+                    self.distributions_df,
                 )
             )
         with mp.Pool() as pool:
             results = pool.starmap(self.run_simulation_for_game, game_simulation_params)
 
         for res in results:
-            temp_fpts_dict.update(res)
+            if isinstance(res, tuple) and len(res) == 2:
+                dct, _rows = res
+                temp_fpts_dict.update(dct)
+            else:
+                temp_fpts_dict.update(res)
 
         # generate arrays for every sim result for each player in the lineup and sum
         fpts_array = np.zeros(shape=(len(self.field_lineups), self.num_iterations))
@@ -2058,16 +2138,18 @@ class NFL_GPP_Simulator:
 
         for index, values in self.field_lineups.items():
             try:
-                fpts_sim = sum([temp_fpts_dict[player] for player in values["Lineup"]])
+                lineup_container = values["Lineup"]
+                if isinstance(lineup_container, dict):
+                    lineup_ids = list(lineup_container.values())
+                else:
+                    lineup_ids = list(lineup_container)
+                fpts_sim = sum([temp_fpts_dict[player_id] for player_id in lineup_ids])
             except KeyError:
-                for player in values["Lineup"]:
-                    if player not in temp_fpts_dict.keys():
-                        print(player)
-                        # for k,v in self.player_dict.items():
-                        # if v['ID'] == player:
-                        #        print(k,v)
-                # print('cant find player in sim dict', values["Lineup"], temp_fpts_dict.keys())
-            # store lineup fpts sum in 2d np array where index (row) corresponds to index of field_lineups and columns are the fpts from each sim
+                for player_id in lineup_ids:
+                    if player_id not in temp_fpts_dict:
+                        print(f"Missing player in sim dict: {player_id}")
+                # Fallback: fill zeros if missing to avoid crash
+                fpts_sim = sum([temp_fpts_dict.get(player_id, 0.0) for player_id in lineup_ids])
             fpts_array[index] = fpts_sim
 
         fpts_array = fpts_array.astype(np.float16)
@@ -2089,6 +2171,7 @@ class NFL_GPP_Simulator:
             shape=self.field_size - len(payout_array), fill_value=-self.entry_fee
         )
         payout_array = np.concatenate((payout_array, l_array))
+
         field_lineups_keys_array = np.array(list(self.field_lineups.keys()))
 
         # Adjusted ROI calculation
@@ -2120,21 +2203,23 @@ class NFL_GPP_Simulator:
         index_to_key = list(self.field_lineups.keys())
         for idx, roi in enumerate(combined_result_array):
             lineup_key = index_to_key[idx]
-            lineup_count = self.field_lineups[lineup_key][
-                "Count"
-            ]  # Assuming "Count" holds the count of the lineups
-            total_sum += roi * lineup_count
+            lineup_count = self.field_lineups[lineup_key]["Count"]
             self.field_lineups[lineup_key]["ROI"] += roi
 
         for idx in self.field_lineups.keys():
             if idx in wins:
                 self.field_lineups[idx]["Wins"] += win_counts[np.where(wins == idx)][0]
             if idx in top1pct:
-                self.field_lineups[idx]["Top1Percent"] += top1pct_counts[
-                    np.where(top1pct == idx)
-                ][0]
+                self.field_lineups[idx]["Top1Percent"] += top1pct_counts[np.where(top1pct == idx)][0]
             if idx in cashes:
                 self.field_lineups[idx]["Cashes"] += cash_counts[np.where(cashes == idx)][0]
+            
+            # Normalize ROI, Wins, Top1Percent, and Cashes by the lineup count
+            count = self.field_lineups[idx]["Count"]
+            self.field_lineups[idx]["ROI"] /= count
+            self.field_lineups[idx]["Wins"]
+            self.field_lineups[idx]["Top1Percent"]
+            self.field_lineups[idx]["Cashes"]
 
         end_time = time.time()
         diff = end_time - start_time
@@ -2148,8 +2233,6 @@ class NFL_GPP_Simulator:
     def output(self):
         unique = {}
         for index, x in self.field_lineups.items():
-            # if index == 0:
-            #    print(x)
             lu_type = x["Type"]
             salary = 0
             fpts_p = 0
@@ -2163,115 +2246,120 @@ class NFL_GPP_Simulator:
             players_vs_def = 0
             def_opps = []
             simDupes = x['Count']
-            for id in x["Lineup"]:
-                for k, v in self.player_dict.items():
-                    if v["ID"] == id:
-                        if "DST" in v["Position"]:
-                            def_opps.append(v["Opp"])
-                        if "QB" in v["Position"]:
-                            qb_tm = v["Team"]
-            for id in x["Lineup"]:
-                for k, v in self.player_dict.items():
-                    if v["ID"] == id:
-                        salary += v["Salary"]
-                        fpts_p += v["Fpts"]
-                        fieldFpts_p += v["fieldFpts"]
-                        ceil_p += v["Ceiling"]
-                        own_p.append(v["Ownership"] / 100)
-                        lu_names.append(v["Name"])
-                        if "DST" not in v["Position"]:
-                            lu_teams.append(v["Team"])
-                            if v["Team"] in def_opps:
-                                players_vs_def += 1
+
+            # Normalize lineup to a dict keyed by roster positions for consistent output
+            lineup_container = x["Lineup"]
+            if isinstance(lineup_container, dict):
+                lineup_map = dict(lineup_container)
+            else:
+                id_to_player = {v["ID"]: v for v in self.player_dict.values()}
+                lineup_map = {}
+                rb_slots = ["RB1", "RB2"]
+                wr_slots = ["WR1", "WR2", "WR3"]
+                rb_i = 0
+                wr_i = 0
+                te_set = False
+                flex_candidates = []
+                for pid in lineup_container:
+                    pinfo = id_to_player.get(pid)
+                    if not pinfo:
                         continue
+                    poslist = pinfo.get("Position", [])
+                    if "DST" in poslist and "DST" not in lineup_map:
+                        lineup_map["DST"] = pid
+                        continue
+                    if "QB" in poslist and "QB" not in lineup_map:
+                        lineup_map["QB"] = pid
+                        continue
+                    if "RB" in poslist and rb_i < 2:
+                        lineup_map[rb_slots[rb_i]] = pid
+                        rb_i += 1
+                        continue
+                    if "WR" in poslist and wr_i < 3:
+                        lineup_map[wr_slots[wr_i]] = pid
+                        wr_i += 1
+                        continue
+                    if "TE" in poslist and not te_set:
+                        lineup_map["TE"] = pid
+                        te_set = True
+                        continue
+                    flex_candidates.append(pid)
+                if "FLEX" not in lineup_map:
+                    remaining = [pid for pid in lineup_container if pid not in lineup_map.values()]
+                    lineup_map["FLEX"] = flex_candidates[0] if len(flex_candidates) > 0 else (remaining[0] if len(remaining) > 0 else None)
+
+            # Accumulate stats and ordered names by roster positions
+            name_map = {}
+            for position in self.roster_positions:
+                player_id = lineup_map.get(position)
+                if not player_id:
+                    continue
+                player = next((v for v in self.player_dict.values() if v["ID"] == player_id), None)
+                if player:
+                    name_map[position] = player["Name"]
+                    if "DST" in player["Position"]:
+                        def_opps.append(player["Opp"])
+                    if "QB" in player["Position"]:
+                        qb_tm = player["Team"]
+                    salary += player["Salary"]
+                    fpts_p += player["Fpts"]
+                    fieldFpts_p += player["fieldFpts"]
+                    ceil_p += player["Ceiling"]
+                    own_p.append(player["Ownership"] / 100)
+                    lu_names.append(player["Name"])
+                    if "DST" not in player["Position"]:
+                        lu_teams.append(player["Team"])
+                        if player["Team"] in def_opps:
+                            players_vs_def += 1
+
             counter = collections.Counter(lu_teams)
             stacks = counter.most_common()
 
             # Find the QB team in stacks and set it as primary stack, remove it from stacks and subtract 1 to make sure qb isn't counted
+            primaryStack = ""
             for s in stacks:
                 if s[0] == qb_tm:
-                    primaryStack = str(qb_tm) + " " + str((s[1]))
+                    primaryStack = f"{qb_tm} {s[1]}"
                     stacks.remove(s)
                     break
 
             # After removing QB team, the first team in stacks will be the team with most players not in QB stack
-            secondaryStack = str(stacks[0][0]) + " " + str(stacks[0][1])
+            secondaryStack = f"{stacks[0][0]} {stacks[0][1]}" if stacks else ""
             own_p = np.prod(own_p)
             win_p = round(x["Wins"] / self.num_iterations * 100, 2)
             top10_p = round(x["Top1Percent"] / self.num_iterations * 100, 2)
             cash_p = round(x["Cashes"] / self.num_iterations * 100, 2)
+
             if self.site == "dk":
                 if self.use_contest_data:
-                    roi_p = round(
-                        x["ROI"] / self.entry_fee / self.num_iterations * 100, 2
-                    )
+                    roi_p = round(x["ROI"] / self.entry_fee / self.num_iterations * 100, 2)
                     roi_round = round(x["ROI"] / x['Count'] / self.num_iterations, 2)
                     lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},${},{}%,{}%,{}%,{},${},{},{},{},{},{}".format(
-                        lu_names[1].replace("#", "-"),
-                        x["Lineup"][1],
-                        lu_names[2].replace("#", "-"),
-                        x["Lineup"][2],
-                        lu_names[3].replace("#", "-"),
-                        x["Lineup"][3],
-                        lu_names[4].replace("#", "-"),
-                        x["Lineup"][4],
-                        lu_names[5].replace("#", "-"),
-                        x["Lineup"][5],
-                        lu_names[6].replace("#", "-"),
-                        x["Lineup"][6],
-                        lu_names[7].replace("#", "-"),
-                        x["Lineup"][7],
-                        lu_names[8].replace("#", "-"),
-                        x["Lineup"][8],
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
-                        fpts_p,
-                        fieldFpts_p,
-                        ceil_p,
-                        salary,
-                        win_p,
-                        top10_p,
-                        roi_p,
-                        own_p,
-                        roi_round,
-                        primaryStack,
-                        secondaryStack,
-                        players_vs_def,
-                        lu_type,
-                        simDupes,
+                        (name_map.get('QB','') or '').replace("#", "-"), lineup_map.get('QB', ''),
+                        (name_map.get('RB1','') or '').replace("#", "-"), lineup_map.get('RB1', ''),
+                        (name_map.get('RB2','') or '').replace("#", "-"), lineup_map.get('RB2', ''),
+                        (name_map.get('WR1','') or '').replace("#", "-"), lineup_map.get('WR1', ''),
+                        (name_map.get('WR2','') or '').replace("#", "-"), lineup_map.get('WR2', ''),
+                        (name_map.get('WR3','') or '').replace("#", "-"), lineup_map.get('WR3', ''),
+                        (name_map.get('TE','') or '').replace("#", "-"), lineup_map.get('TE', ''),
+                        (name_map.get('FLEX','') or '').replace("#", "-"), lineup_map.get('FLEX', ''),
+                        (name_map.get('DST','') or '').replace("#", "-"), lineup_map.get('DST', ''),
+                        fpts_p, fieldFpts_p, ceil_p, salary, win_p, top10_p, roi_p, own_p, roi_round,
+                        primaryStack, secondaryStack, players_vs_def, lu_type, simDupes
                     )
                 else:
-                    lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{}%,{}%,{}%,{},{},{},{},{}".format(
-                        lu_names[1].replace("#", "-"),
-                        x["Lineup"][1],
-                        lu_names[2].replace("#", "-"),
-                        x["Lineup"][2],
-                        lu_names[3].replace("#", "-"),
-                        x["Lineup"][3],
-                        lu_names[4].replace("#", "-"),
-                        x["Lineup"][4],
-                        lu_names[5].replace("#", "-"),
-                        x["Lineup"][5],
-                        lu_names[6].replace("#", "-"),
-                        x["Lineup"][6],
-                        lu_names[7].replace("#", "-"),
-                        x["Lineup"][7],
-                        lu_names[8].replace("#", "-"),
-                        x["Lineup"][8],
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
-                        fpts_p,
-                        fieldFpts_p,
-                        ceil_p,
-                        salary,
-                        win_p,
-                        top10_p,
-                        own_p,
-                        primaryStack,
-                        secondaryStack,
-                        players_vs_def,
-                        lu_type,
-                        simDupes
+                    lineup_str = "{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{} ({}),{},{},{},{},{}%,{}%,{}%,{},{},{},{},{}".format(
+                        (name_map.get('QB','') or '').replace("#", "-"), lineup_map.get('QB', ''),
+                        (name_map.get('RB1','') or '').replace("#", "-"), lineup_map.get('RB1', ''),
+                        (name_map.get('RB2','') or '').replace("#", "-"), lineup_map.get('RB2', ''),
+                        (name_map.get('WR1','') or '').replace("#", "-"), lineup_map.get('WR1', ''),
+                        (name_map.get('WR2','') or '').replace("#", "-"), lineup_map.get('WR2', ''),
+                        (name_map.get('WR3','') or '').replace("#", "-"), lineup_map.get('WR3', ''),
+                        (name_map.get('TE','') or '').replace("#", "-"), lineup_map.get('TE', ''),
+                        (name_map.get('FLEX','') or '').replace("#", "-"), lineup_map.get('FLEX', ''),
+                        (name_map.get('DST','') or '').replace("#", "-"), lineup_map.get('DST', ''),
+                        fpts_p, fieldFpts_p, ceil_p, salary, win_p, top10_p, own_p,
+                        primaryStack, secondaryStack, players_vs_def, lu_type, simDupes
                     )
             elif self.site == "fd":
                 if self.use_contest_data:
@@ -2280,24 +2368,15 @@ class NFL_GPP_Simulator:
                     )
                     roi_round = round(x["ROI"] / x['Count'] / self.num_iterations, 2)
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{},{}%,{}%,{}%,{},${},{},{},{},{},{}".format(
-                        lu_names[1].replace("#", "-"),
-                        x["Lineup"][1],
-                        lu_names[2].replace("#", "-"),
-                        x["Lineup"][2],
-                        lu_names[3].replace("#", "-"),
-                        x["Lineup"][3],
-                        lu_names[4].replace("#", "-"),
-                        x["Lineup"][4],
-                        lu_names[5].replace("#", "-"),
-                        x["Lineup"][5],
-                        lu_names[6].replace("#", "-"),
-                        x["Lineup"][6],
-                        lu_names[7].replace("#", "-"),
-                        x["Lineup"][7],
-                        lu_names[8].replace("#", "-"),
-                        x["Lineup"][8],
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
+                        lineup_map.get('QB', ''), (name_map.get('QB','') or '').replace("#", "-"),
+                        lineup_map.get('RB1', ''), (name_map.get('RB1','') or '').replace("#", "-"),
+                        lineup_map.get('RB2', ''), (name_map.get('RB2','') or '').replace("#", "-"),
+                        lineup_map.get('WR1', ''), (name_map.get('WR1','') or '').replace("#", "-"),
+                        lineup_map.get('WR2', ''), (name_map.get('WR2','') or '').replace("#", "-"),
+                        lineup_map.get('WR3', ''), (name_map.get('WR3','') or '').replace("#", "-"),
+                        lineup_map.get('TE', ''), (name_map.get('TE','') or '').replace("#", "-"),
+                        lineup_map.get('FLEX', ''), (name_map.get('FLEX','') or '').replace("#", "-"),
+                        lineup_map.get('DST', ''), (name_map.get('DST','') or '').replace("#", "-"),
                         fpts_p,
                         fieldFpts_p,
                         ceil_p,
@@ -2315,24 +2394,15 @@ class NFL_GPP_Simulator:
                     )
                 else:
                     lineup_str = "{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{}:{},{},{},{},{},{}%,{}%,{},{},{},{},{},{}".format(
-                        lu_names[1].replace("#", "-"),
-                        x["Lineup"][1],
-                        lu_names[2].replace("#", "-"),
-                        x["Lineup"][2],
-                        lu_names[3].replace("#", "-"),
-                        x["Lineup"][3],
-                        lu_names[4].replace("#", "-"),
-                        x["Lineup"][4],
-                        lu_names[5].replace("#", "-"),
-                        x["Lineup"][5],
-                        lu_names[6].replace("#", "-"),
-                        x["Lineup"][6],
-                        lu_names[7].replace("#", "-"),
-                        x["Lineup"][7],
-                        lu_names[8].replace("#", "-"),
-                        x["Lineup"][8],
-                        lu_names[0].replace("#", "-"),
-                        x["Lineup"][0],
+                        lineup_map.get('QB', ''), (name_map.get('QB','') or '').replace("#", "-"),
+                        lineup_map.get('RB1', ''), (name_map.get('RB1','') or '').replace("#", "-"),
+                        lineup_map.get('RB2', ''), (name_map.get('RB2','') or '').replace("#", "-"),
+                        lineup_map.get('WR1', ''), (name_map.get('WR1','') or '').replace("#", "-"),
+                        lineup_map.get('WR2', ''), (name_map.get('WR2','') or '').replace("#", "-"),
+                        lineup_map.get('WR3', ''), (name_map.get('WR3','') or '').replace("#", "-"),
+                        lineup_map.get('TE', ''), (name_map.get('TE','') or '').replace("#", "-"),
+                        lineup_map.get('FLEX', ''), (name_map.get('FLEX','') or '').replace("#", "-"),
+                        lineup_map.get('DST', ''), (name_map.get('DST','') or '').replace("#", "-"),
                         fpts_p,
                         fieldFpts_p,
                         ceil_p,
@@ -2389,7 +2459,12 @@ class NFL_GPP_Simulator:
             )
             unique_players = {}
             for val in self.field_lineups.values():
-                for player in val["Lineup"]:
+                lineup_container = val["Lineup"]
+                if isinstance(lineup_container, dict):
+                    iter_ids = lineup_container.values()
+                else:
+                    iter_ids = lineup_container
+                for player in iter_ids:
                     if player not in unique_players:
                         unique_players[player] = {
                             "Wins": val["Wins"],
@@ -2420,12 +2495,16 @@ class NFL_GPP_Simulator:
                         p_name = v["Name"]
                         position = "/".join(v.get("Position"))
                         team = v.get("Team")
+                        proj = v["Fpts"]
+                        salary = v["Salary"]
                         break
                 f.write(
-                    "{},{},{},{}%,{}%,{}%,{}%,${}\n".format(
+                    "{},{},{},${},{},{}%,{}%,{}%,${}\n".format(
                         p_name.replace("#", "-"),
                         position,
                         team,
+                        salary,
+                        proj,
                         win_p,
                         top10_p,
                         field_p,
